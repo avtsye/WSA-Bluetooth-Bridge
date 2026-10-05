@@ -14,18 +14,12 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
-      - name: Generate application icon
-        shell: pwsh
-        run: |
-          python -m pip install --disable-pip-version-check pillow
-          python scripts/generate_icon.py
-
       - name: Build Windows host
         run: dotnet build windows-host/WsaBluetoothHost.csproj --configuration Release
       - name: Publish Windows host (Lite)
         run: dotnet publish windows-host/WsaBluetoothHost.csproj --configuration Release --runtime win-x64 --self-contained false -p:PublishSingleFile=true -o artifacts/windows-host-lite
 
-      - name: Copy generated icon
+      - name: Copy application icon
         shell: pwsh
         run: Copy-Item "windows-host\app.ico" "artifacts\windows-host-lite\app.ico" -Force
 
