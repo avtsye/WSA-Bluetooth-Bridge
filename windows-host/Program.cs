@@ -4,6 +4,9 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using NAudio.CoreAudioApi;
+using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Advertisement;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
@@ -69,7 +72,9 @@ static async Task RunSessionAsync(TcpClient client)
             "bluetooth.deep-scan",
             "ble.connect",
             "gatt.discover",
-            "gatt.read"
+            "gatt.read",
+            "audio.outputs",
+            "audio.test"
         }
     });
 
@@ -327,6 +332,113 @@ static async Task RunSessionAsync(TcpClient client)
                         watcher = null;
                         await SendAsync(new { type = "scan.state", state = "stopped" });
                         break;
+
+                    case "audio.outputs":
+                    {
+                        using var enumerator = new MMDeviceEnumerator();
+                        var outputs = enumerator
+                            .EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
+                            .Select(endpoint => new
+                            {
+                                id = endpoint.ID,
+                                name = endpoint.FriendlyName,
+                                state = endpoint.State.ToString()
+                            })
+                            .ToArray();
+
+                        await SendAsync(new
+                        {
+                            type = "audio.outputs.result",
+                            outputs
+                        });
+                        break;
+                    }
+
+                    case "audio.test":
+                    {
+                        if (!request.RootElement.TryGetProperty("endpointId", out var endpointElement) ||
+                            string.IsNullOrWhiteSpace(endpointElement.GetString()))
+                        {
+                            await SendAsync(new
+                            {
+                                type = "audio.test.result",
+                                success = false,
+                                error = "missing_endpoint"
+                            });
+                            break;
+                        }
+
+                        var endpointId = endpointElement.GetString()!;
+                        using var enumerator = new MMDeviceEnumerator();
+                        MMDevice? endpoint = null;
+
+                        try
+                        {
+                            endpoint = enumerator.GetDevice(endpointId);
+                        }
+                        catch
+                        {
+                        }
+
+                        if (endpoint is null)
+                        {
+                            await SendAsync(new
+                            {
+                                type = "audio.test.result",
+                                success = false,
+                                endpointId,
+                                error = "endpoint_not_found"
+                            });
+                            break;
+                        }
+
+                        try
+                        {
+                            var signal = new SignalGenerator(44100, 1)
+                            {
+                                Gain = 0.12,
+                                Frequency = 880,
+                                Type = SignalGeneratorType.Sin
+                            };
+
+                            using var output = new WasapiOut(
+                                endpoint,
+                                AudioClientShareMode.Shared,
+                                true,
+                                100);
+
+                            output.Init(signal.ToWaveProvider16());
+                            output.Play();
+                            await Task.Delay(900);
+                            output.Stop();
+
+                            await SendAsync(new
+                            {
+                                type = "audio.test.result",
+                                success = true,
+                                endpointId,
+                                endpointName = endpoint.FriendlyName,
+                                frequencyHz = 880,
+                                durationMs = 900
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            await SendAsync(new
+                            {
+                                type = "audio.test.result",
+                                success = false,
+                                endpointId,
+                                endpointName = endpoint.FriendlyName,
+                                error = ex.Message
+                            });
+                        }
+                        finally
+                        {
+                            endpoint.Dispose();
+                        }
+                        break;
+                    }
 
                     case "device.connect":
                     {
