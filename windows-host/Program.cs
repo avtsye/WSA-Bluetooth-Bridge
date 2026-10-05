@@ -17,6 +17,16 @@ using Windows.Storage.Streams;
 var backgroundMode = args.Any(x =>
     string.Equals(x, "--background", StringComparison.OrdinalIgnoreCase));
 
+var bootstrap = await RootBootstrap.EnsureAsync();
+if (bootstrap == RootBootstrapResult.UpgradeFailed)
+{
+    MessageBox.Show(
+        "התקנת Root/Magisk לא הושלמה. פתח את C:\\ProgramData\\WSABluetoothBridge\\root-bootstrap.log לפרטים.",
+        "WSA Bluetooth Bridge",
+        MessageBoxButtons.OK,
+        MessageBoxIcon.Error);
+}
+
 if (backgroundMode)
     BackgroundMode.HideConsole();
 
