@@ -84,3 +84,65 @@ jobs:
         with:
           name: wsa-btd-${{ matrix.abi.name }}
           path: build/android-daemon-${{ matrix.abi.name }}/wsa-btd
+
+
+  package-installer:
+    runs-on: windows-latest
+    needs:
+      - windows-host
+      - android-daemon
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Windows host
+        uses: actions/download-artifact@v4
+        with:
+          name: WsaBluetoothBridge-Windows-Lite
+          path: artifacts/windows-host-lite
+
+      - name: Download x86_64 daemon
+        uses: actions/download-artifact@v4
+        with:
+          name: wsa-btd-x86_64
+          path: artifacts/daemon-x86_64
+
+      - name: Download arm64 daemon
+        uses: actions/download-artifact@v4
+        with:
+          name: wsa-btd-arm64-v8a
+          path: artifacts/daemon-arm64-v8a
+
+      - name: Build WSA system module
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "artifacts\wsa-module\bin\x86_64" | Out-Null
+          New-Item -ItemType Directory -Force "artifacts\wsa-module\bin\arm64-v8a" | Out-Null
+          Copy-Item "android-system-module\module.prop" "artifacts\wsa-module\module.prop"
+          Copy-Item "android-system-module\service.sh" "artifacts\wsa-module\service.sh"
+          Copy-Item "android-system-module\post-fs-data.sh" "artifacts\wsa-module\post-fs-data.sh"
+          Copy-Item "android-system-module\uninstall.sh" "artifacts\wsa-module\uninstall.sh"
+          Copy-Item "artifacts\daemon-x86_64\wsa-btd" "artifacts\wsa-module\bin\x86_64\wsa-btd"
+          Copy-Item "artifacts\daemon-arm64-v8a\wsa-btd" "artifacts\wsa-module\bin\arm64-v8a\wsa-btd"
+          Compress-Archive -Path "artifacts\wsa-module\*" -DestinationPath "artifacts\wsa-system-module.zip" -Force
+
+      - name: Upload WSA system module
+        uses: actions/upload-artifact@v4
+        with:
+          name: WsaBluetoothBridge-WSA-System-Module
+          path: artifacts/wsa-system-module.zip
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Compile Windows installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "artifacts\installer" | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "windows-installer\WsaBluetoothBridge.iss"
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: WsaBluetoothBridge-Setup
+          path: artifacts/installer/WSA-Bluetooth-Bridge-Setup.exe
