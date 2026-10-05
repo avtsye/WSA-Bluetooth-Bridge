@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.22)
+project(wsa_bridge_audio_hal C)
+add_library(audio.wsa_bridge.default SHARED audio_wsa_bridge.c)
+target_include_directories(audio.wsa_bridge.default PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_options(audio.wsa_bridge.default PRIVATE -Wall -Wextra -Wno-unused-parameter -fvisibility=hidden)
+set_target_properties(audio.wsa_bridge.default PROPERTIES PREFIX "" OUTPUT_NAME "audio.wsa_bridge.default")
+target_link_libraries(audio.wsa_bridge.default log)
