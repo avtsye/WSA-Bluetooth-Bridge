@@ -30,6 +30,7 @@ struct wsa_in {
 
 struct bridge_state {
     pthread_mutex_t lock;
+    pthread_mutex_t write_lock;
     int fd;
     uint32_t tx_seq;
     int refs;
@@ -40,6 +41,7 @@ struct bridge_state {
 
 static struct bridge_state g_bridge = {
     .lock = PTHREAD_MUTEX_INITIALIZER,
+    .write_lock = PTHREAD_MUTEX_INITIALIZER,
     .fd = -1,
 };
 
@@ -104,18 +106,31 @@ static void bridge_reset_locked(void) {
 static int bridge_send_frame(const void* data, size_t len) {
     pthread_mutex_lock(&g_bridge.lock);
     if (bridge_ensure_locked() != 0) { pthread_mutex_unlock(&g_bridge.lock); return -1; }
+    int fd = g_bridge.fd;
+    uint32_t seq = g_bridge.tx_seq++;
+    pthread_mutex_unlock(&g_bridge.lock);
+
     uint8_t h[16] = {'W','S','A','B',WSAB_VERSION,STREAM_PLAYBACK,0,0,0,0,0,0,0,0,0,0};
     put_u32le(h+8, (uint32_t)len);
-    put_u32le(h+12, g_bridge.tx_seq++);
-    int ok = write_all(g_bridge.fd, h, sizeof(h)) == 0 && write_all(g_bridge.fd, data, len) == 0;
-    if (!ok) bridge_reset_locked();
-    pthread_mutex_unlock(&g_bridge.lock);
+    put_u32le(h+12, seq);
+
+    pthread_mutex_lock(&g_bridge.write_lock);
+    int ok = write_all(fd, h, sizeof(h)) == 0 && write_all(fd, data, len) == 0;
+    pthread_mutex_unlock(&g_bridge.write_lock);
+
+    if (!ok) {
+        pthread_mutex_lock(&g_bridge.lock);
+        if (g_bridge.fd == fd) bridge_reset_locked();
+        pthread_mutex_unlock(&g_bridge.lock);
+    }
     return ok ? 0 : -1;
 }
 
 static ssize_t bridge_read_capture(void* out, size_t bytes) {
     pthread_mutex_lock(&g_bridge.lock);
     if (bridge_ensure_locked() != 0) { pthread_mutex_unlock(&g_bridge.lock); return -1; }
+    int fd = g_bridge.fd;
+    pthread_mutex_unlock(&g_bridge.lock);
 
     size_t done = 0;
     while (done < bytes) {
@@ -128,22 +143,21 @@ static ssize_t bridge_read_capture(void* out, size_t bytes) {
         }
 
         uint8_t h[16];
-        if (read_all(g_bridge.fd, h, sizeof(h)) != 0 ||
+        if (read_all(fd, h, sizeof(h)) != 0 ||
             memcmp(h, "WSAB", 4) != 0 || h[4] != WSAB_VERSION) {
-            bridge_reset_locked(); pthread_mutex_unlock(&g_bridge.lock); return -1;
+            pthread_mutex_lock(&g_bridge.lock); if (g_bridge.fd == fd) bridge_reset_locked(); pthread_mutex_unlock(&g_bridge.lock); return -1;
         }
         uint32_t len = get_u32le(h+8);
         if (len > sizeof(g_bridge.rx)) {
             bridge_reset_locked(); pthread_mutex_unlock(&g_bridge.lock); return -1;
         }
-        if (read_all(g_bridge.fd, g_bridge.rx, len) != 0) {
-            bridge_reset_locked(); pthread_mutex_unlock(&g_bridge.lock); return -1;
+        if (read_all(fd, g_bridge.rx, len) != 0) {
+            pthread_mutex_lock(&g_bridge.lock); if (g_bridge.fd == fd) bridge_reset_locked(); pthread_mutex_unlock(&g_bridge.lock); return -1;
         }
         if (h[5] != STREAM_CAPTURE) continue;
         g_bridge.rx_off = 0;
         g_bridge.rx_len = len;
     }
-    pthread_mutex_unlock(&g_bridge.lock);
     return (ssize_t)done;
 }
 
