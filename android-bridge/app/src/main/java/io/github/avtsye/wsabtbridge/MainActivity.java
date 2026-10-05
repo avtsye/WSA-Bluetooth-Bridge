@@ -62,11 +62,20 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
 
+        ScrollView screenScroll = new ScrollView(this);
+        screenScroll.setFillViewport(true);
+        screenScroll.setVerticalScrollBarEnabled(true);
+        screenScroll.setScrollbarFadingEnabled(false);
+
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(24, 24, 24, 24);
+        root.setPadding(24, 24, 24, 48);
         root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         root.setTextDirection(View.TEXT_DIRECTION_RTL);
+
+        screenScroll.addView(root, new ScrollView.LayoutParams(
+                ScrollView.LayoutParams.MATCH_PARENT,
+                ScrollView.LayoutParams.WRAP_CONTENT));
 
         TextView title = new TextView(this);
         title.setText("גשר Bluetooth ל־WSA");
@@ -156,8 +165,8 @@ public final class MainActivity extends Activity {
         log = new TextView(this);
         log.setTextIsSelectable(true);
 
-        ScrollView scroll = new ScrollView(this);
-        scroll.addView(log);
+        log.setPadding(0, 16, 0, 24);
+        log.setMinLines(6);
 
         root.addView(title);
         root.addView(connectHost);
@@ -180,10 +189,11 @@ public final class MainActivity extends Activity {
         root.addView(serviceUuid);
         root.addView(characteristicUuid);
         root.addView(read);
-        root.addView(scroll, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
+        root.addView(log, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        setContentView(root);
+        setContentView(screenScroll);
 
         connectHost.setOnClickListener(v -> connect());
         scan.setOnClickListener(v -> send("{\"type\":\"scan.start\"}"));
