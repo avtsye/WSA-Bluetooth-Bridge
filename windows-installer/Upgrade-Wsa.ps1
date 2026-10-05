@@ -10,6 +10,8 @@ $stateRoot = Join-Path $env:LOCALAPPDATA 'WSABluetoothBridge'
 $builderRoot = Join-Path $stateRoot 'WSA-Builder'
 $backupRoot = Join-Path $stateRoot 'Backups'
 $logFile = Join-Path $stateRoot 'wsa-upgrade.log'
+$reportFile = Join-Path $stateRoot 'root-install-report.txt'
+$adb = Join-Path $base 'platform-tools\adb.exe'
 
 New-Item -ItemType Directory -Force $stateRoot | Out-Null
 New-Item -ItemType Directory -Force $builderRoot | Out-Null
@@ -132,7 +134,198 @@ function Confirm-Replacement([string]$BackupPath) {
     return $choice -eq [System.Windows.Forms.DialogResult]::Yes
 }
 
-function Install-CustomWsa([string]$BuildFolder, [string]$BackupPath) {
+
+function Write-RootReport {
+    param(
+        [string]$BuildFolder,
+        [bool]$PackageReplaced,
+        [bool]$MagiskPackagePresent,
+        [bool]$SuPresent,
+        [bool]$RootWorks,
+        [string]$Fingerprint,
+        [string]$Serial,
+        [string]$InstallLocation,
+        [string]$Notes
+    )
+
+    $lines = @(
+        'WSA Bluetooth Bridge - Root installation report'
+        ('Timestamp: ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
+        ('Build folder: ' + $BuildFolder)
+        ('ADB serial: ' + $Serial)
+        ('WSA install location: ' + $InstallLocation)
+        ('WSA package replaced: ' + $(if ($PackageReplaced) { 'YES' } else { 'NO' }))
+        ('Magisk package present: ' + $(if ($MagiskPackagePresent) { 'YES' } else { 'NO' }))
+        ('su present: ' + $(if ($SuPresent) { 'YES' } else { 'NO' }))
+        ('root works: ' + $(if ($RootWorks) { 'YES' } else { 'NO' }))
+        ('fingerprint: ' + $Fingerprint)
+        ('notes: ' + $Notes)
+    )
+
+    Set-Content -Path $reportFile -Value $lines -Encoding UTF8
+}
+
+function Get-AdbWsaDevice {
+    param([int]$TimeoutSeconds = 180)
+
+    if (-not (Test-Path $adb)) {
+        return $null
+    }
+
+    & $adb start-server | Out-Null
+    & $adb connect 127.0.0.1:58526 2>$null | Out-Null
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $lines = @(& $adb devices 2>$null)
+        foreach ($line in $lines) {
+            if ($line -match '^\s*(\S+)\s+device\s*
+    if (-not (Test-Administrator)) {
+        throw 'שלב החלפת WSA דורש הרשאת מנהל.'
+    }
+
+    Get-Process -Name 'WsaClient','WsaService','WsaSettings' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+
+    $pkg = Get-AppxPackage -Name 'MicrosoftCorporationII.WindowsSubsystemForAndroid' -ErrorAction SilentlyContinue
+    if ($pkg) {
+        $pkg | Remove-AppxPackage -ErrorAction Stop
+    }
+
+    $installScript = Join-Path $BuildFolder 'Install.ps1'
+    & powershell.exe -ExecutionPolicy Bypass -NoProfile -File $installScript
+    if ($LASTEXITCODE -ne 0) { throw 'התקנת WSA המותאם נכשלה.' }
+
+    if ($BackupPath -and (Test-Path $BackupPath)) {
+        $targetDir = Join-Path $env:LOCALAPPDATA 'Packages\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe\LocalCache'
+        New-Item -ItemType Directory -Force $targetDir | Out-Null
+        Copy-Item $BackupPath (Join-Path $targetDir 'userdata.vhdx') -Force
+    }
+
+    Verify-RootedWsa -BuildFolder $BuildFolder -PreviousInstallLocation $PreviousInstallLocation | Out-Null
+}
+
+try {
+    if (-not (Test-Administrator)) { Restart-Elevated }
+
+    $distro = Ensure-Wsl
+    $buildFolder = Build-RootedWsa $distro
+    $backup = Backup-WsaData
+    $oldPkg = Get-AppxPackage -Name 'MicrosoftCorporationII.WindowsSubsystemForAndroid' -ErrorAction SilentlyContinue
+    $oldInstallLocation = if ($oldPkg) { [string]$oldPkg.InstallLocation } else { '' }
+
+    if (-not (Confirm-Replacement $backup)) {
+        Write-Host 'החלפת WSA בוטלה. הבנייה והגיבוי נשמרו.'
+        Stop-Transcript | Out-Null
+        exit 20
+    }
+
+    Install-CustomWsa $buildFolder $backup $oldInstallLocation
+    Write-Host ('WSA מותאם עם Magisk הותקן ואומת בהצלחה. דוח: ' + $reportFile)
+    Stop-Transcript | Out-Null
+    exit 0
+}
+catch {
+    Write-Error $_
+    try { Stop-Transcript | Out-Null } catch {}
+    exit 1
+}) {
+                $serial = $matches[1]
+                if ($serial -like '127.0.0.1:*' -or $serial -like 'localhost:*') {
+                    return $serial
+                }
+            }
+        }
+        Start-Sleep -Seconds 3
+        & $adb connect 127.0.0.1:58526 2>$null | Out-Null
+    }
+
+    return $null
+}
+
+function Start-Wsa {
+    $pkg = Get-AppxPackage -Name 'MicrosoftCorporationII.WindowsSubsystemForAndroid' -ErrorAction SilentlyContinue
+    if (-not $pkg) { return }
+
+    try {
+        Start-Process explorer.exe 'shell:AppsFolder\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe!Settings' -ErrorAction SilentlyContinue | Out-Null
+    }
+    catch {}
+
+    Start-Sleep -Seconds 5
+}
+
+function Verify-RootedWsa {
+    param(
+        [string]$BuildFolder,
+        [string]$PreviousInstallLocation
+    )
+
+    $pkg = Get-AppxPackage -Name 'MicrosoftCorporationII.WindowsSubsystemForAndroid' -ErrorAction SilentlyContinue
+    if (-not $pkg) {
+        Write-RootReport $BuildFolder $false $false $false $false '' '' '' 'WSA package is not registered after installation.'
+        throw 'לא נמצאה חבילת WSA לאחר ההתקנה.'
+    }
+
+    $installLocation = [string]$pkg.InstallLocation
+    $packageReplaced = $false
+
+    if ($PreviousInstallLocation) {
+        $packageReplaced = -not [string]::Equals(
+            (Resolve-Path -LiteralPath $PreviousInstallLocation -ErrorAction SilentlyContinue).Path,
+            (Resolve-Path -LiteralPath $installLocation -ErrorAction SilentlyContinue).Path,
+            [System.StringComparison]::OrdinalIgnoreCase)
+    }
+
+    if (-not $packageReplaced -and $BuildFolder) {
+        $buildFull = [IO.Path]::GetFullPath($BuildFolder).TrimEnd('\')
+        $installFull = [IO.Path]::GetFullPath($installLocation).TrimEnd('\')
+        $packageReplaced = $installFull.StartsWith($buildFull, [System.StringComparison]::OrdinalIgnoreCase)
+    }
+
+    Start-Wsa
+    $serial = Get-AdbWsaDevice -TimeoutSeconds 180
+    if (-not $serial) {
+        Write-RootReport $BuildFolder $packageReplaced $false $false $false '' '' $installLocation 'WSA registered, but ADB did not come online.'
+        throw 'WSA הותקן, אך לא עלה ב-ADB לצורך אימות Root.'
+    }
+
+    $fingerprint = (& $adb -s $serial shell getprop ro.build.fingerprint 2>$null | Select-Object -First 1).Trim()
+
+    $suPath = (& $adb -s $serial shell 'command -v su' 2>$null | Select-Object -First 1).Trim()
+    $suPresent = -not [string]::IsNullOrWhiteSpace($suPath)
+
+    $magiskList = (& $adb -s $serial shell 'pm list packages' 2>$null | Select-String -Pattern 'magisk' -SimpleMatch | ForEach-Object { $_.Line })
+    $magiskCmd = (& $adb -s $serial shell 'command -v magisk' 2>$null | Select-Object -First 1).Trim()
+    $magiskPackagePresent = ($magiskList.Count -gt 0) -or (-not [string]::IsNullOrWhiteSpace($magiskCmd))
+
+    $rootText = ''
+    $rootWorks = $false
+    if ($suPresent) {
+        $rootText = (& $adb -s $serial shell su -c id 2>&1 | Out-String).Trim()
+        $rootWorks = $rootText -match 'uid=0'
+    }
+
+    $notes = if ($rootWorks) { 'Root verification passed.' } else { 'Root verification failed. su output: ' + $rootText }
+    Write-RootReport $BuildFolder $packageReplaced $magiskPackagePresent $suPresent $rootWorks $fingerprint $serial $installLocation $notes
+
+    if (-not $packageReplaced) {
+        throw ('WSA החדש נרשם, אך לא הצלחתי לאמת שהחבילה הישנה הוחלפה. ראה: ' + $reportFile)
+    }
+    if (-not $magiskPackagePresent) {
+        throw ('WSA הותקן אך Magisk לא זוהה. ראה: ' + $reportFile)
+    }
+    if (-not $suPresent) {
+        throw ('WSA הותקן אך su לא נמצא. ראה: ' + $reportFile)
+    }
+    if (-not $rootWorks) {
+        throw ('su נמצא אך Root אינו פעיל. ראה: ' + $reportFile)
+    }
+
+    return $true
+}
+
+function Install-CustomWsa([string]$BuildFolder, [string]$BackupPath, [string]$PreviousInstallLocation) {
     if (-not (Test-Administrator)) {
         throw 'שלב החלפת WSA דורש הרשאת מנהל.'
     }
