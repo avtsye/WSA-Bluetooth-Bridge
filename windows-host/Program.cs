@@ -15,6 +15,10 @@ using Windows.Storage.Streams;
 
 const int port = 17890;
 const int audioPort = 17891;
+
+using var adbReverse = new AdbReverseManager(port, audioPort);
+adbReverse.Start();
+
 using var audioRuntime = new AudioBridgeRuntime(audioPort);
 _ = audioRuntime.RunServerAsync();
 
