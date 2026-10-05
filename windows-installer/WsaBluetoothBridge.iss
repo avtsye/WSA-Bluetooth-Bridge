@@ -1,6 +1,6 @@
 ; WSA Bluetooth Bridge installer
 #define MyAppName "WSA Bluetooth Bridge"
-#define MyAppVersion "0.4.0"
+#define MyAppVersion "0.5.0"
 #define MyAppPublisher "avtsye"
 #define MyAppExeName "WsaBluetoothHost.exe"
 
@@ -25,6 +25,7 @@ SetupLogging=yes
 [Files]
 Source: "..\artifacts\windows-host-lite\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\artifacts\wsa-system-module.zip"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\artifacts\android-client\app-debug.apk"; DestDir: "{app}"; DestName: "WsaBluetoothBridgeClient.apk"; Flags: ignoreversion
 Source: "Install-WsaSystem.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
@@ -39,8 +40,8 @@ Name: "autostart"; Description: "הפעל את WSA Bluetooth Bridge אוטומט
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "WSABluetoothBridge"; ValueData: """{app}\{#MyAppExeName}"" --background"; Tasks: autostart; Flags: uninsdeletevalue
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--background"; Description: "הפעל את WSA Bluetooth Bridge"; Flags: nowait postinstall skipifsilent
-Filename: "{app}\Install-WsaSystem.ps1"; Parameters: "-ExecutionPolicy Bypass -NoProfile"; Description: "נסה להתקין את רכיב המערכת בתוך WSA"; Flags: postinstall shellexec skipifsilent unchecked
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--background"; Flags: nowait runhidden
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NoProfile -File ""{app}\Install-WsaSystem.ps1"""; StatusMsg: "מתקין את רכיב Android/WSA..."; Flags: waituntilterminated
 
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/C taskkill /IM WsaBluetoothHost.exe /F"; Flags: runhidden; RunOnceId: "StopBridge"
