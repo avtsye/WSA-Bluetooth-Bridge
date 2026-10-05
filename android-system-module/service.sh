@@ -30,10 +30,13 @@ while [ "$i" -lt 60 ]; do
 done
 
 PROBE="$MODDIR/audio-env.sh"
-chmod 0755 "$PROBE" 2>/dev/null || true
+POLICY="$MODDIR/policy-shim.sh"
+HEALTH="$MODDIR/health-check.sh"
+chmod 0755 "$PROBE" "$POLICY" "$HEALTH" "$MODDIR/enable-policy.sh" "$MODDIR/disable-policy.sh" 2>/dev/null || true
 
 # Capture the exact WSA Audio HAL/AudioPolicy environment after Android boot.
 "$PROBE" || echo "audio environment probe failed"
+"$POLICY" || echo "audio policy shim preparation failed"
 
 while true; do
   echo "Starting wsa-btd ($ABI)"
@@ -41,6 +44,7 @@ while true; do
   pid=$!
   sleep 2
   "$PROBE" || true
+  "$HEALTH" || true
   wait "$pid"
   code=$?
   echo "wsa-btd exited with $code; restarting in 3 seconds"
