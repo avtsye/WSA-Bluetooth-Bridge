@@ -1,0 +1,6 @@
+id=wsa_bt_bridge
+name=WSA Bluetooth Bridge System Integration
+version=0.4.0
+versionCode=40
+author=avtsye
+description=Boot-time WSA Bluetooth/audio bridge daemon and system integration scaffold
