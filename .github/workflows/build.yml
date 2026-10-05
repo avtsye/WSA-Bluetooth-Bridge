@@ -138,6 +138,27 @@ jobs:
           name: WsaBluetoothBridge-WSA-System-Module
           path: artifacts/wsa-system-module.zip
 
+      - name: Validate installer PowerShell
+        shell: pwsh
+        run: |
+          $files = @(
+            "windows-installer\Install-WsaSystem.ps1",
+            "windows-installer\Upgrade-Wsa.ps1"
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file),
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.Message }
+              exit 1
+            }
+          }
+
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup -y --no-progress
