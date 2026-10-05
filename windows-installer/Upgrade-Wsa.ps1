@@ -11,12 +11,11 @@ $builderRoot = Join-Path $stateRoot 'WSA-Builder'
 $backupRoot = Join-Path $stateRoot 'Backups'
 $logFile = Join-Path $stateRoot 'wsa-upgrade.log'
 $reportFile = Join-Path $stateRoot 'root-install-report.txt'
-$adb = Join-Path $base 'platform-tools\adb.exe'
+$adb = Join-Path $base 'platform-tools\\adb.exe'
 
 New-Item -ItemType Directory -Force $stateRoot | Out-Null
 New-Item -ItemType Directory -Force $builderRoot | Out-Null
 New-Item -ItemType Directory -Force $backupRoot | Out-Null
-
 Start-Transcript -Path $logFile -Append | Out-Null
 
 function Test-Administrator {
@@ -30,7 +29,7 @@ function Restart-Elevated {
     if ($Resume) { $args += '-Resume' }
     if ($ForceRoot) { $args += '-ForceRoot' }
     Start-Process powershell.exe -Verb RunAs -ArgumentList ($args -join ' ')
-    Stop-Transcript | Out-Null
+    try { Stop-Transcript | Out-Null } catch {}
     exit 0
 }
 
@@ -45,7 +44,6 @@ function Get-WslDistro {
 function Ensure-Wsl {
     $distro = Get-WslDistro
     if ($distro) { return $distro }
-
     if (-not (Test-Administrator)) { Restart-Elevated }
 
     Add-Type -AssemblyName System.Windows.Forms
@@ -53,40 +51,39 @@ function Ensure-Wsl {
         'כדי לבנות WSA מותאם נדרש WSL. המתקין יכול להתקין Ubuntu עבור התהליך. ייתכן שיידרש אתחול של Windows. להמשיך?',
         'WSA Bluetooth Bridge',
         [System.Windows.Forms.MessageBoxButtons]::YesNo,
-        [System.Windows.Forms.MessageBoxIcon]::Information)
-
-    if ($choice -ne [System.Windows.Forms.DialogResult]::Yes) {
-        throw 'המשתמש ביטל התקנת WSL.'
-    }
+        [System.Windows.Forms.MessageBoxIcon]::Information
+    )
+    if ($choice -ne [System.Windows.Forms.DialogResult]::Yes) { throw 'המשתמש ביטל התקנת WSL.' }
 
     & wsl.exe --install -d Ubuntu --no-launch
-    if ($LASTEXITCODE -ne 0) {
-        throw 'התקנת WSL/Ubuntu נכשלה.'
-    }
+    if ($LASTEXITCODE -ne 0) { throw 'התקנת WSL/Ubuntu נכשלה.' }
 
     $runOnce = 'powershell.exe -ExecutionPolicy Bypass -NoProfile -File "' + $PSCommandPath + '" -Resume'
-    New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce' -Name 'WSABluetoothBridgeUpgrade' -Value $runOnce -PropertyType String -Force | Out-Null
+    if ($ForceRoot) { $runOnce += ' -ForceRoot' }
+    New-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce' -Name 'WSABluetoothBridgeUpgrade' -Value $runOnce -PropertyType String -Force | Out-Null
 
-    Add-Type -AssemblyName System.Windows.Forms
     [System.Windows.Forms.MessageBox]::Show(
         'WSL הוכן. יש להפעיל מחדש את Windows; השדרוג ימשיך אוטומטית לאחר הכניסה הבאה.',
         'WSA Bluetooth Bridge',
         [System.Windows.Forms.MessageBoxButtons]::OK,
-        [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
+        [System.Windows.Forms.MessageBoxIcon]::Information
+    ) | Out-Null
 
-    Stop-Transcript | Out-Null
+    try { Stop-Transcript | Out-Null } catch {}
     exit 3010
 }
 
-function Convert-ToWslPath([string]$WindowsPath, [string]$Distro) {
+function Convert-ToWslPath {
+    param([string]$WindowsPath,[string]$Distro)
     $result = & wsl.exe -d $Distro -u root -- wslpath -a $WindowsPath
     if ($LASTEXITCODE -ne 0 -or -not $result) { throw 'לא ניתן להמיר נתיב Windows ל-WSL.' }
     return ($result | Select-Object -First 1).Trim()
 }
 
-function Build-RootedWsa([string]$Distro) {
-    $linuxBuilder = Convert-ToWslPath $builderRoot $Distro
+function Build-RootedWsa {
+    param([string]$Distro)
 
+    $linuxBuilder = Convert-ToWslPath -WindowsPath $builderRoot -Distro $Distro
     $bootstrap = 'export DEBIAN_FRONTEND=noninteractive; apt-get update; apt-get install -y git ca-certificates curl python3 aria2 unzip whiptail python3-venv python3-pip p7zip-full; mkdir -p ' + "'" + $linuxBuilder + "'"
     & wsl.exe -d $Distro -u root -- bash -lc $bootstrap
     if ($LASTEXITCODE -ne 0) { throw 'הכנת סביבת הבנייה ב-WSL נכשלה.' }
@@ -100,20 +97,18 @@ function Build-RootedWsa([string]$Distro) {
     & wsl.exe -d $Distro -u root -- bash -lc $build
     if ($LASTEXITCODE -ne 0) { throw 'בניית WSA עם Magisk נכשלה. ה-WSA הקיים לא שונה.' }
 
-    $outputRoot = Join-Path $builderRoot 'MagiskOnWSALocal\output'
+    $outputRoot = Join-Path $builderRoot 'MagiskOnWSALocal\\output'
     $candidate = Get-ChildItem -Path $outputRoot -Directory -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if (-not $candidate) { throw 'הבנייה הסתיימה אך לא נמצאה תיקיית output.' }
 
     $installScript = Join-Path $candidate.FullName 'Install.ps1'
     if (-not (Test-Path $installScript)) { throw 'תוצאת הבנייה אינה מכילה Install.ps1; WSA הקיים לא שונה.' }
-
     return $candidate.FullName
 }
 
 function Backup-WsaData {
-    $source = Join-Path $env:LOCALAPPDATA 'Packages\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe\LocalCache\userdata.vhdx'
+    $source = Join-Path $env:LOCALAPPDATA 'Packages\\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe\\LocalCache\\userdata.vhdx'
     if (-not (Test-Path $source)) { return $null }
-
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     $folder = Join-Path $backupRoot $stamp
     New-Item -ItemType Directory -Force $folder | Out-Null
@@ -122,10 +117,9 @@ function Backup-WsaData {
     return $dest
 }
 
-function Confirm-Replacement([string]$BackupPath) {
-    if ($ForceRoot) {
-        return $true
-    }
+function Confirm-Replacement {
+    param([string]$BackupPath)
+    if ($ForceRoot) { return $true }
 
     Add-Type -AssemblyName System.Windows.Forms
     $backupText = if ($BackupPath) { 'גיבוי נוצר ב: ' + $BackupPath } else { 'לא נמצא userdata.vhdx לגיבוי.' }
@@ -133,7 +127,6 @@ function Confirm-Replacement([string]$BackupPath) {
     $choice = [System.Windows.Forms.MessageBox]::Show($message,'WSA Bluetooth Bridge',[System.Windows.Forms.MessageBoxButtons]::YesNo,[System.Windows.Forms.MessageBoxIcon]::Warning)
     return $choice -eq [System.Windows.Forms.DialogResult]::Yes
 }
-
 
 function Write-RootReport {
     param(
@@ -161,16 +154,12 @@ function Write-RootReport {
         ('fingerprint: ' + $Fingerprint)
         ('notes: ' + $Notes)
     )
-
     Set-Content -Path $reportFile -Value $lines -Encoding UTF8
 }
 
 function Get-AdbWsaDevice {
     param([int]$TimeoutSeconds = 180)
-
-    if (-not (Test-Path $adb)) {
-        return $null
-    }
+    if (-not (Test-Path $adb)) { return $null }
 
     & $adb start-server | Out-Null
     & $adb connect 127.0.0.1:58526 2>$null | Out-Null
@@ -179,25 +168,98 @@ function Get-AdbWsaDevice {
     while ((Get-Date) -lt $deadline) {
         $lines = @(& $adb devices 2>$null)
         foreach ($line in $lines) {
-            if ($line -match '^\s*(\S+)\s+device\s*
-    if (-not (Test-Administrator)) {
-        throw 'שלב החלפת WSA דורש הרשאת מנהל.'
+            if ($line -match '^\\s*(\\S+)\\s+device\\s*$') {
+                $serial = $matches[1]
+                if ($serial -like '127.0.0.1:*' -or $serial -like 'localhost:*') { return $serial }
+            }
+        }
+        Start-Sleep -Seconds 3
+        & $adb connect 127.0.0.1:58526 2>$null | Out-Null
     }
+    return $null
+}
+
+function Start-Wsa {
+    $pkg = Get-AppxPackage -Name 'MicrosoftCorporationII.WindowsSubsystemForAndroid' -ErrorAction SilentlyContinue
+    if (-not $pkg) { return }
+    try {
+        Start-Process explorer.exe 'shell:AppsFolder\\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe!Settings' -ErrorAction SilentlyContinue | Out-Null
+    } catch {}
+    Start-Sleep -Seconds 5
+}
+
+function Verify-RootedWsa {
+    param([string]$BuildFolder,[string]$PreviousInstallLocation)
+
+    $pkg = Get-AppxPackage -Name 'MicrosoftCorporationII.WindowsSubsystemForAndroid' -ErrorAction SilentlyContinue
+    if (-not $pkg) {
+        Write-RootReport -BuildFolder $BuildFolder -PackageReplaced $false -MagiskPackagePresent $false -SuPresent $false -RootWorks $false -Fingerprint '' -Serial '' -InstallLocation '' -Notes 'WSA package is not registered after installation.'
+        throw 'לא נמצאה חבילת WSA לאחר ההתקנה.'
+    }
+
+    $installLocation = [string]$pkg.InstallLocation
+    $packageReplaced = $false
+    if ($PreviousInstallLocation -and $installLocation) {
+        $oldFull = [IO.Path]::GetFullPath($PreviousInstallLocation).TrimEnd('\\')
+        $newFull = [IO.Path]::GetFullPath($installLocation).TrimEnd('\\')
+        $packageReplaced = -not [string]::Equals($oldFull,$newFull,[System.StringComparison]::OrdinalIgnoreCase)
+    }
+    if (-not $packageReplaced -and $BuildFolder -and $installLocation) {
+        $buildFull = [IO.Path]::GetFullPath($BuildFolder).TrimEnd('\\')
+        $installFull = [IO.Path]::GetFullPath($installLocation).TrimEnd('\\')
+        $packageReplaced = $installFull.StartsWith($buildFull,[System.StringComparison]::OrdinalIgnoreCase)
+    }
+
+    Start-Wsa
+    $serial = Get-AdbWsaDevice -TimeoutSeconds 180
+    if (-not $serial) {
+        Write-RootReport -BuildFolder $BuildFolder -PackageReplaced $packageReplaced -MagiskPackagePresent $false -SuPresent $false -RootWorks $false -Fingerprint '' -Serial '' -InstallLocation $installLocation -Notes 'WSA registered, but ADB did not come online.'
+        throw 'WSA הותקן, אך לא עלה ב-ADB לצורך אימות Root.'
+    }
+
+    $fingerprint = ((& $adb -s $serial shell getprop ro.build.fingerprint 2>$null | Select-Object -First 1) | Out-String).Trim()
+    $suPath = ((& $adb -s $serial shell 'command -v su' 2>$null | Select-Object -First 1) | Out-String).Trim()
+    $suPresent = -not [string]::IsNullOrWhiteSpace($suPath)
+
+    $packageLines = @(& $adb -s $serial shell 'pm list packages' 2>$null)
+    $magiskPackagePresent = @($packageLines | Where-Object { $_ -match '(?i)magisk' }).Count -gt 0
+    $magiskCmd = ((& $adb -s $serial shell 'command -v magisk' 2>$null | Select-Object -First 1) | Out-String).Trim()
+    if (-not [string]::IsNullOrWhiteSpace($magiskCmd)) { $magiskPackagePresent = $true }
+
+    $rootText = ''
+    $rootWorks = $false
+    if ($suPresent) {
+        $rootText = (& $adb -s $serial shell su -c id 2>&1 | Out-String).Trim()
+        $rootWorks = $rootText -match 'uid=0'
+    }
+
+    $notes = if ($rootWorks) { 'Root verification passed.' } else { 'Root verification failed. su output: ' + $rootText }
+    Write-RootReport -BuildFolder $BuildFolder -PackageReplaced $packageReplaced -MagiskPackagePresent $magiskPackagePresent -SuPresent $suPresent -RootWorks $rootWorks -Fingerprint $fingerprint -Serial $serial -InstallLocation $installLocation -Notes $notes
+
+    if (-not $packageReplaced) { throw ('WSA החדש נרשם, אך לא הצלחתי לאמת שהחבילה הישנה הוחלפה. ראה: ' + $reportFile) }
+    if (-not $magiskPackagePresent) { throw ('WSA הותקן אך Magisk לא זוהה. ראה: ' + $reportFile) }
+    if (-not $suPresent) { throw ('WSA הותקן אך su לא נמצא. ראה: ' + $reportFile) }
+    if (-not $rootWorks) { throw ('su נמצא אך Root אינו פעיל. ראה: ' + $reportFile) }
+    return $true
+}
+
+function Install-CustomWsa {
+    param([string]$BuildFolder,[string]$BackupPath,[string]$PreviousInstallLocation)
+
+    if (-not (Test-Administrator)) { throw 'שלב החלפת WSA דורש הרשאת מנהל.' }
 
     Get-Process -Name 'WsaClient','WsaService','WsaSettings' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
 
     $pkg = Get-AppxPackage -Name 'MicrosoftCorporationII.WindowsSubsystemForAndroid' -ErrorAction SilentlyContinue
-    if ($pkg) {
-        $pkg | Remove-AppxPackage -ErrorAction Stop
-    }
+    if ($pkg) { $pkg | Remove-AppxPackage -ErrorAction Stop }
 
     $installScript = Join-Path $BuildFolder 'Install.ps1'
     & powershell.exe -ExecutionPolicy Bypass -NoProfile -File $installScript
     if ($LASTEXITCODE -ne 0) { throw 'התקנת WSA המותאם נכשלה.' }
 
     if ($BackupPath -and (Test-Path $BackupPath)) {
-        $targetDir = Join-Path $env:LOCALAPPDATA 'Packages\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe\LocalCache'
+        $targetDir = Join-Path $env:LOCALAPPDATA 'Packages\\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe\\LocalCache'
         New-Item -ItemType Directory -Force $targetDir | Out-Null
         Copy-Item $BackupPath (Join-Path $targetDir 'userdata.vhdx') -Force
     }
@@ -209,162 +271,20 @@ try {
     if (-not (Test-Administrator)) { Restart-Elevated }
 
     $distro = Ensure-Wsl
-    $buildFolder = Build-RootedWsa $distro
+    $buildFolder = Build-RootedWsa -Distro $distro
     $backup = Backup-WsaData
     $oldPkg = Get-AppxPackage -Name 'MicrosoftCorporationII.WindowsSubsystemForAndroid' -ErrorAction SilentlyContinue
     $oldInstallLocation = if ($oldPkg) { [string]$oldPkg.InstallLocation } else { '' }
 
-    if (-not (Confirm-Replacement $backup)) {
+    if (-not (Confirm-Replacement -BackupPath $backup)) {
         Write-Host 'החלפת WSA בוטלה. הבנייה והגיבוי נשמרו.'
-        Stop-Transcript | Out-Null
+        try { Stop-Transcript | Out-Null } catch {}
         exit 20
     }
 
-    Install-CustomWsa $buildFolder $backup $oldInstallLocation
+    Install-CustomWsa -BuildFolder $buildFolder -BackupPath $backup -PreviousInstallLocation $oldInstallLocation
     Write-Host ('WSA מותאם עם Magisk הותקן ואומת בהצלחה. דוח: ' + $reportFile)
-    Stop-Transcript | Out-Null
-    exit 0
-}
-catch {
-    Write-Error $_
     try { Stop-Transcript | Out-Null } catch {}
-    exit 1
-}) {
-                $serial = $matches[1]
-                if ($serial -like '127.0.0.1:*' -or $serial -like 'localhost:*') {
-                    return $serial
-                }
-            }
-        }
-        Start-Sleep -Seconds 3
-        & $adb connect 127.0.0.1:58526 2>$null | Out-Null
-    }
-
-    return $null
-}
-
-function Start-Wsa {
-    $pkg = Get-AppxPackage -Name 'MicrosoftCorporationII.WindowsSubsystemForAndroid' -ErrorAction SilentlyContinue
-    if (-not $pkg) { return }
-
-    try {
-        Start-Process explorer.exe 'shell:AppsFolder\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe!Settings' -ErrorAction SilentlyContinue | Out-Null
-    }
-    catch {}
-
-    Start-Sleep -Seconds 5
-}
-
-function Verify-RootedWsa {
-    param(
-        [string]$BuildFolder,
-        [string]$PreviousInstallLocation
-    )
-
-    $pkg = Get-AppxPackage -Name 'MicrosoftCorporationII.WindowsSubsystemForAndroid' -ErrorAction SilentlyContinue
-    if (-not $pkg) {
-        Write-RootReport $BuildFolder $false $false $false $false '' '' '' 'WSA package is not registered after installation.'
-        throw 'לא נמצאה חבילת WSA לאחר ההתקנה.'
-    }
-
-    $installLocation = [string]$pkg.InstallLocation
-    $packageReplaced = $false
-
-    if ($PreviousInstallLocation) {
-        $packageReplaced = -not [string]::Equals(
-            (Resolve-Path -LiteralPath $PreviousInstallLocation -ErrorAction SilentlyContinue).Path,
-            (Resolve-Path -LiteralPath $installLocation -ErrorAction SilentlyContinue).Path,
-            [System.StringComparison]::OrdinalIgnoreCase)
-    }
-
-    if (-not $packageReplaced -and $BuildFolder) {
-        $buildFull = [IO.Path]::GetFullPath($BuildFolder).TrimEnd('\')
-        $installFull = [IO.Path]::GetFullPath($installLocation).TrimEnd('\')
-        $packageReplaced = $installFull.StartsWith($buildFull, [System.StringComparison]::OrdinalIgnoreCase)
-    }
-
-    Start-Wsa
-    $serial = Get-AdbWsaDevice -TimeoutSeconds 180
-    if (-not $serial) {
-        Write-RootReport $BuildFolder $packageReplaced $false $false $false '' '' $installLocation 'WSA registered, but ADB did not come online.'
-        throw 'WSA הותקן, אך לא עלה ב-ADB לצורך אימות Root.'
-    }
-
-    $fingerprint = (& $adb -s $serial shell getprop ro.build.fingerprint 2>$null | Select-Object -First 1).Trim()
-
-    $suPath = (& $adb -s $serial shell 'command -v su' 2>$null | Select-Object -First 1).Trim()
-    $suPresent = -not [string]::IsNullOrWhiteSpace($suPath)
-
-    $magiskList = (& $adb -s $serial shell 'pm list packages' 2>$null | Select-String -Pattern 'magisk' -SimpleMatch | ForEach-Object { $_.Line })
-    $magiskCmd = (& $adb -s $serial shell 'command -v magisk' 2>$null | Select-Object -First 1).Trim()
-    $magiskPackagePresent = ($magiskList.Count -gt 0) -or (-not [string]::IsNullOrWhiteSpace($magiskCmd))
-
-    $rootText = ''
-    $rootWorks = $false
-    if ($suPresent) {
-        $rootText = (& $adb -s $serial shell su -c id 2>&1 | Out-String).Trim()
-        $rootWorks = $rootText -match 'uid=0'
-    }
-
-    $notes = if ($rootWorks) { 'Root verification passed.' } else { 'Root verification failed. su output: ' + $rootText }
-    Write-RootReport $BuildFolder $packageReplaced $magiskPackagePresent $suPresent $rootWorks $fingerprint $serial $installLocation $notes
-
-    if (-not $packageReplaced) {
-        throw ('WSA החדש נרשם, אך לא הצלחתי לאמת שהחבילה הישנה הוחלפה. ראה: ' + $reportFile)
-    }
-    if (-not $magiskPackagePresent) {
-        throw ('WSA הותקן אך Magisk לא זוהה. ראה: ' + $reportFile)
-    }
-    if (-not $suPresent) {
-        throw ('WSA הותקן אך su לא נמצא. ראה: ' + $reportFile)
-    }
-    if (-not $rootWorks) {
-        throw ('su נמצא אך Root אינו פעיל. ראה: ' + $reportFile)
-    }
-
-    return $true
-}
-
-function Install-CustomWsa([string]$BuildFolder, [string]$BackupPath, [string]$PreviousInstallLocation) {
-    if (-not (Test-Administrator)) {
-        throw 'שלב החלפת WSA דורש הרשאת מנהל.'
-    }
-
-    Get-Process -Name 'WsaClient','WsaService','WsaSettings' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 2
-
-    $pkg = Get-AppxPackage -Name 'MicrosoftCorporationII.WindowsSubsystemForAndroid' -ErrorAction SilentlyContinue
-    if ($pkg) {
-        $pkg | Remove-AppxPackage -ErrorAction Stop
-    }
-
-    $installScript = Join-Path $BuildFolder 'Install.ps1'
-    & powershell.exe -ExecutionPolicy Bypass -NoProfile -File $installScript
-    if ($LASTEXITCODE -ne 0) { throw 'התקנת WSA המותאם נכשלה.' }
-
-    if ($BackupPath -and (Test-Path $BackupPath)) {
-        $targetDir = Join-Path $env:LOCALAPPDATA 'Packages\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe\LocalCache'
-        New-Item -ItemType Directory -Force $targetDir | Out-Null
-        Copy-Item $BackupPath (Join-Path $targetDir 'userdata.vhdx') -Force
-    }
-}
-
-try {
-    if (-not (Test-Administrator)) { Restart-Elevated }
-
-    $distro = Ensure-Wsl
-    $buildFolder = Build-RootedWsa $distro
-    $backup = Backup-WsaData
-
-    if (-not (Confirm-Replacement $backup)) {
-        Write-Host 'החלפת WSA בוטלה. הבנייה והגיבוי נשמרו.'
-        Stop-Transcript | Out-Null
-        exit 20
-    }
-
-    Install-CustomWsa $buildFolder $backup
-    Write-Host 'WSA מותאם עם Magisk הותקן בהצלחה.'
-    Stop-Transcript | Out-Null
     exit 0
 }
 catch {
