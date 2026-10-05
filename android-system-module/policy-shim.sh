@@ -107,15 +107,16 @@ case "$POLICY" in
   /system/*) OVERLAY="$MODDIR/system/${POLICY#/system/}" ;;
 esac
 
-mkdir -p "$(dirname "$OVERLAY")"
-cp -f "$PATCHED" "$OVERLAY"
-
 if [ ! -f "$MARKER" ]; then
-  log "Overlay prepared but not activated. Marker missing: $MARKER"
+  # Do not leave a live Magisk overlay behind before explicit activation.
+  rm -f "$OVERLAY" 2>/dev/null || true
+  log "Compatible policy detected; candidate prepared outside overlay tree"
   echo '{"compatible":true,"enabled":false,"reason":"awaiting_activation"}' > "$STATE"
   exit 0
 fi
 
-log "Policy overlay prepared for activation on next Android restart"
+mkdir -p "$(dirname "$OVERLAY")"
+cp -f "$PATCHED" "$OVERLAY"
+log "Policy overlay copied into Magisk tree for next Android restart"
 echo '{"compatible":true,"enabled":true,"reason":"overlay_prepared"}' > "$STATE"
 exit 0
