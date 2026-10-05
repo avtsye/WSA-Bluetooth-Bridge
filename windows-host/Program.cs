@@ -14,6 +14,10 @@ using Windows.Devices.Enumeration;
 using Windows.Storage.Streams;
 
 const int port = 17890;
+const int audioPort = 17891;
+using var audioRuntime = new AudioBridgeRuntime(audioPort);
+_ = audioRuntime.RunServerAsync();
+
 var listener = new TcpListener(IPAddress.Loopback, port);
 listener.Start();
 Console.WriteLine($"WSA Bluetooth Host listening on 127.0.0.1:{port}");
@@ -25,7 +29,7 @@ while (true)
 
     try
     {
-        await RunSessionAsync(client);
+        await RunSessionAsync(client, audioRuntime);
     }
     catch (Exception ex)
     {
@@ -33,7 +37,7 @@ while (true)
     }
 }
 
-static async Task RunSessionAsync(TcpClient client)
+static async Task RunSessionAsync(TcpClient client, AudioBridgeRuntime audioRuntime)
 {
     using var stream = client.GetStream();
     using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
@@ -75,6 +79,11 @@ static async Task RunSessionAsync(TcpClient client)
             "gatt.read",
             "audio.outputs",
             "audio.routes",
+            "audio.route.select",
+            "audio.playback.start",
+            "audio.playback.stop",
+            "audio.capture.start",
+            "audio.capture.stop",
             "audio.test"
         }
     });
@@ -335,39 +344,46 @@ static async Task RunSessionAsync(TcpClient client)
                         break;
 
                     case "audio.routes":
+                        await SendAsync(audioRuntime.GetRoutes());
+                        break;
+
+                    case "audio.route.select":
                     {
-                        using var enumerator = new MMDeviceEnumerator();
+                        var renderEndpointId = request.RootElement.TryGetProperty("renderEndpointId", out var renderId)
+                            ? renderId.GetString()
+                            : null;
+                        var captureEndpointId = request.RootElement.TryGetProperty("captureEndpointId", out var captureId)
+                            ? captureId.GetString()
+                            : null;
 
-                        var render = enumerator
-                            .EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
-                            .Select(endpoint => new
-                            {
-                                id = endpoint.ID,
-                                name = endpoint.FriendlyName,
-                                flow = "render",
-                                state = endpoint.State.ToString()
-                            })
-                            .ToArray();
-
-                        var capture = enumerator
-                            .EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
-                            .Select(endpoint => new
-                            {
-                                id = endpoint.ID,
-                                name = endpoint.FriendlyName,
-                                flow = "capture",
-                                state = endpoint.State.ToString()
-                            })
-                            .ToArray();
-
-                        await SendAsync(new
-                        {
-                            type = "audio.routes.result",
-                            render,
-                            capture
-                        });
+                        await SendAsync(audioRuntime.SelectRoute(renderEndpointId, captureEndpointId));
                         break;
                     }
+
+                    case "audio.playback.start":
+                    {
+                        var sampleRate = request.RootElement.TryGetProperty("sampleRate", out var sr)
+                            ? sr.GetInt32()
+                            : 48000;
+                        var channels = request.RootElement.TryGetProperty("channels", out var ch)
+                            ? ch.GetInt32()
+                            : 2;
+
+                        await SendAsync(audioRuntime.StartPlayback(sampleRate, channels));
+                        break;
+                    }
+
+                    case "audio.playback.stop":
+                        await SendAsync(audioRuntime.StopPlayback());
+                        break;
+
+                    case "audio.capture.start":
+                        await SendAsync(audioRuntime.StartCapture());
+                        break;
+
+                    case "audio.capture.stop":
+                        await SendAsync(audioRuntime.StopCapture());
+                        break;
 
                     case "audio.outputs":
                     {
