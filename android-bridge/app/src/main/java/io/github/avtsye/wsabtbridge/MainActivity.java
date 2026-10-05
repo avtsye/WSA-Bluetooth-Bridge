@@ -31,6 +31,7 @@ import java.util.Map;
 public final class MainActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private TextView log;
+    private TextView connectionStatus;
     private EditText address;
     private Spinner devicesSpinner;
     private final Map<String, String> deviceLabels = new LinkedHashMap<>();
@@ -81,8 +82,14 @@ public final class MainActivity extends Activity {
         address.setSingleLine(true);
         address.setInputType(InputType.TYPE_CLASS_TEXT);
 
+        connectionStatus = new TextView(this);
+        connectionStatus.setText("סטטוס התקן: לא נבדק");
+        connectionStatus.setTextSize(18);
+        connectionStatus.setGravity(Gravity.CENTER);
+        connectionStatus.setPadding(12, 18, 12, 18);
+
         Button connectDevice = new Button(this);
-        connectDevice.setText("התחבר להתקן שנבחר");
+        connectDevice.setText("התחבר ובדוק חיבור אמיתי");
 
         Button disconnectDevice = new Button(this);
         disconnectDevice.setText("נתק את ההתקן");
@@ -114,6 +121,7 @@ public final class MainActivity extends Activity {
         root.addView(deepScan);
         root.addView(devicesSpinner);
         root.addView(address);
+        root.addView(connectionStatus);
         root.addView(connectDevice);
         root.addView(disconnectDevice);
         root.addView(discover);
@@ -145,6 +153,7 @@ public final class MainActivity extends Activity {
         });
 
         connectDevice.setOnClickListener(v -> {
+            connectionStatus.setText("סטטוס התקן: בודק חיבור ו־GATT...");
             try {
                 JSONObject command = new JSONObject();
                 command.put("type", "device.connect");
@@ -196,6 +205,8 @@ public final class MainActivity extends Activity {
                         String type = object.optString("type");
                         if ("scan.result".equals(type) || "device.catalog.result".equals(type)) {
                             updateDeviceList(object);
+                        } else if ("device.connection".equals(type)) {
+                            updateConnectionStatus(object);
                         }
                         append(object.toString(2));
                     } catch (Exception ignored) {
@@ -208,6 +219,34 @@ public final class MainActivity extends Activity {
                 append("החיבור נכשל: " + e);
             }
         }, "wsa-bt-reader").start();
+    }
+
+    private void updateConnectionStatus(JSONObject object) {
+        final String state = object.optString("state", "");
+        final boolean verified = object.optBoolean("verified", false);
+        final String name = object.optString("name", "").trim();
+        final String addressValue = object.optString("address", "").trim();
+        final String gattStatus = object.optString("gattStatus", "");
+        final int serviceCount = object.optInt("serviceCount", 0);
+
+        main.post(() -> {
+            if ("connected".equals(state) && verified) {
+                String deviceText = name.isEmpty() ? addressValue : name;
+                connectionStatus.setText(
+                        "✅ חיבור BLE אמיתי אושר\n" +
+                        deviceText +
+                        "\nGATT: " + gattStatus +
+                        " • שירותים: " + serviceCount
+                );
+            } else if ("disconnected".equals(state)) {
+                connectionStatus.setText("סטטוס התקן: מנותק");
+            } else if ("not_connected".equals(state)) {
+                connectionStatus.setText("סטטוס התקן: אין התקן מחובר");
+            } else {
+                String reason = gattStatus.isEmpty() ? object.optString("error", "לא ידוע") : gattStatus;
+                connectionStatus.setText("❌ החיבור לא אומת\nסיבה: " + reason);
+            }
+        });
     }
 
     private void updateDeviceList(JSONObject object) {
