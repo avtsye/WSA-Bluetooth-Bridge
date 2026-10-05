@@ -15,6 +15,7 @@ import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -39,6 +40,11 @@ public final class MainActivity extends Activity {
     private final ArrayList<String> deviceAddresses = new ArrayList<>();
     private final ArrayList<String> deviceDisplay = new ArrayList<>();
     private ArrayAdapter<String> deviceAdapter;
+    private Spinner audioOutputsSpinner;
+    private final ArrayList<String> audioEndpointIds = new ArrayList<>();
+    private final ArrayList<String> audioEndpointNames = new ArrayList<>();
+    private ArrayAdapter<String> audioAdapter;
+    private TextView audioStatus;
     private EditText serviceUuid;
     private EditText characteristicUuid;
     private Socket socket;
@@ -94,6 +100,29 @@ public final class MainActivity extends Activity {
         Button disconnectDevice = new Button(this);
         disconnectDevice.setText("נתק את ההתקן");
 
+        TextView audioTitle = new TextView(this);
+        audioTitle.setText("בדיקת שמע דו־כיוונית");
+        audioTitle.setTextSize(18);
+        audioTitle.setGravity(Gravity.CENTER);
+        audioTitle.setPadding(0, 18, 0, 8);
+
+        Button loadAudioOutputs = new Button(this);
+        loadAudioOutputs.setText("טען יציאות שמע של Windows");
+
+        audioOutputsSpinner = new Spinner(this);
+        audioAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, audioEndpointNames);
+        audioOutputsSpinner.setAdapter(audioAdapter);
+
+        Button playTestTone = new Button(this);
+        playTestTone.setText("השמע צליל בדיקה באוזניה שנבחרה");
+
+        audioStatus = new TextView(this);
+        audioStatus.setText("בדיקת שמע: טרם בוצעה");
+        audioStatus.setTextSize(17);
+        audioStatus.setGravity(Gravity.CENTER);
+        audioStatus.setPadding(12, 12, 12, 18);
+
         Button discover = new Button(this);
         discover.setText("טען שירותי GATT");
 
@@ -124,6 +153,11 @@ public final class MainActivity extends Activity {
         root.addView(connectionStatus);
         root.addView(connectDevice);
         root.addView(disconnectDevice);
+        root.addView(audioTitle);
+        root.addView(loadAudioOutputs);
+        root.addView(audioOutputsSpinner);
+        root.addView(playTestTone);
+        root.addView(audioStatus);
         root.addView(discover);
         root.addView(serviceUuid);
         root.addView(characteristicUuid);
@@ -167,6 +201,26 @@ public final class MainActivity extends Activity {
         disconnectDevice.setOnClickListener(v ->
                 send("{\"type\":\"device.disconnect\"}"));
 
+        loadAudioOutputs.setOnClickListener(v ->
+                send("{\"type\":\"audio.outputs\"}"));
+
+        playTestTone.setOnClickListener(v -> {
+            int position = audioOutputsSpinner.getSelectedItemPosition();
+            if (position < 0 || position >= audioEndpointIds.size()) {
+                audioStatus.setText("❌ לא נבחרה יציאת שמע");
+                return;
+            }
+            audioStatus.setText("בדיקת שמע: משמיע צליל...");
+            try {
+                JSONObject command = new JSONObject();
+                command.put("type", "audio.test");
+                command.put("endpointId", audioEndpointIds.get(position));
+                send(command.toString());
+            } catch (Exception e) {
+                audioStatus.setText("❌ לא ניתן לשלוח את בדיקת השמע: " + e.getMessage());
+            }
+        });
+
         discover.setOnClickListener(v ->
                 send("{\"type\":\"gatt.discover\"}"));
 
@@ -207,6 +261,10 @@ public final class MainActivity extends Activity {
                             updateDeviceList(object);
                         } else if ("device.connection".equals(type)) {
                             updateConnectionStatus(object);
+                        } else if ("audio.outputs.result".equals(type)) {
+                            updateAudioOutputs(object);
+                        } else if ("audio.test.result".equals(type)) {
+                            updateAudioTestStatus(object);
                         }
                         append(object.toString(2));
                     } catch (Exception ignored) {
@@ -219,6 +277,57 @@ public final class MainActivity extends Activity {
                 append("החיבור נכשל: " + e);
             }
         }, "wsa-bt-reader").start();
+    }
+
+    private void updateAudioOutputs(JSONObject object) {
+        JSONArray outputs = object.optJSONArray("outputs");
+        if (outputs == null) return;
+
+        main.post(() -> {
+            audioEndpointIds.clear();
+            audioEndpointNames.clear();
+
+            for (int i = 0; i < outputs.length(); i++) {
+                JSONObject item = outputs.optJSONObject(i);
+                if (item == null) continue;
+
+                String id = item.optString("id", "");
+                String name = item.optString("name", "יציאת שמע ללא שם");
+                if (id.isEmpty()) continue;
+
+                audioEndpointIds.add(id);
+                audioEndpointNames.add(name);
+            }
+
+            audioAdapter.notifyDataSetChanged();
+
+            if (audioEndpointIds.isEmpty()) {
+                audioStatus.setText("❌ Windows לא החזיר יציאות שמע פעילות");
+            } else {
+                audioStatus.setText("נמצאו " + audioEndpointIds.size() + " יציאות שמע. בחר אוזניה ובדוק.");
+            }
+        });
+    }
+
+    private void updateAudioTestStatus(JSONObject object) {
+        final boolean success = object.optBoolean("success", false);
+        final String endpointName = object.optString("endpointName", "");
+        final String error = object.optString("error", "");
+
+        main.post(() -> {
+            if (success) {
+                audioStatus.setText(
+                        "🔊 צליל הבדיקה נשלח אל:\n" +
+                        (endpointName.isEmpty() ? "יציאת השמע שנבחרה" : endpointName) +
+                        "\nאם שמעת את הצליל באוזניה — הכיוון WSA → Windows → אוזניה עובד."
+                );
+            } else {
+                audioStatus.setText(
+                        "❌ שליחת צליל הבדיקה נכשלה" +
+                        (error.isEmpty() ? "" : "\n" + error)
+                );
+            }
+        });
     }
 
     private void updateConnectionStatus(JSONObject object) {
