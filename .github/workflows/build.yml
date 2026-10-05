@@ -96,12 +96,48 @@ jobs:
           path: build/android-daemon-${{ matrix.abi.name }}/wsa-btd
 
 
+  android-audio-hal:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        abi:
+          - name: x86_64
+            cmake_abi: x86_64
+          - name: arm64-v8a
+            cmake_abi: arm64-v8a
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android NDK
+        run: sdkmanager "ndk;27.2.12479018"
+      - name: Configure Audio HAL
+        run: >
+          cmake -S android-audio-hal -B build/android-audio-hal-${{ matrix.abi.name }}
+          -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake"
+          -DANDROID_ABI=${{ matrix.abi.cmake_abi }}
+          -DANDROID_PLATFORM=android-30
+          -DCMAKE_BUILD_TYPE=Release
+      - name: Build Audio HAL
+        run: cmake --build build/android-audio-hal-${{ matrix.abi.name }} --config Release
+      - name: Verify Audio HAL
+        run: |
+          test -s build/android-audio-hal-${{ matrix.abi.name }}/audio.wsa_bridge.default.so
+          file build/android-audio-hal-${{ matrix.abi.name }}/audio.wsa_bridge.default.so
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wsa-audio-hal-${{ matrix.abi.name }}
+          path: build/android-audio-hal-${{ matrix.abi.name }}/audio.wsa_bridge.default.so
+
+
   package-installer:
     runs-on: windows-latest
     needs:
       - windows-host
       - android-daemon
       - android-test-client
+      - android-audio-hal
     steps:
       - uses: actions/checkout@v4
 
@@ -129,15 +165,30 @@ jobs:
           name: WsaBluetoothBridgeClient-debug
           path: artifacts/android-client
 
+      - name: Download x86_64 Audio HAL
+        uses: actions/download-artifact@v4
+        with:
+          name: wsa-audio-hal-x86_64
+          path: artifacts/audio-hal-x86_64
+
+      - name: Download arm64 Audio HAL
+        uses: actions/download-artifact@v4
+        with:
+          name: wsa-audio-hal-arm64-v8a
+          path: artifacts/audio-hal-arm64-v8a
+
       - name: Build WSA system module
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force "artifacts\wsa-module\bin\x86_64" | Out-Null
           New-Item -ItemType Directory -Force "artifacts\wsa-module\bin\arm64-v8a" | Out-Null
+          New-Item -ItemType Directory -Force "artifacts\wsa-module\hal\x86_64" | Out-Null
+          New-Item -ItemType Directory -Force "artifacts\wsa-module\hal\arm64-v8a" | Out-Null
           Copy-Item "android-system-module\module.prop" "artifacts\wsa-module\module.prop"
           Copy-Item "android-system-module\service.sh" "artifacts\wsa-module\service.sh"
           Copy-Item "android-system-module\post-fs-data.sh" "artifacts\wsa-module\post-fs-data.sh"
           Copy-Item "android-system-module\uninstall.sh" "artifacts\wsa-module\uninstall.sh"
+          Copy-Item "android-system-module\customize.sh" "artifacts\wsa-module\customize.sh"
           Copy-Item "android-system-module\audio-env.sh" "artifacts\wsa-module\audio-env.sh"
           Copy-Item "android-system-module\policy-shim.sh" "artifacts\wsa-module\policy-shim.sh"
           Copy-Item "android-system-module\health-check.sh" "artifacts\wsa-module\health-check.sh"
@@ -145,6 +196,8 @@ jobs:
           Copy-Item "android-system-module\disable-policy.sh" "artifacts\wsa-module\disable-policy.sh"
           Copy-Item "artifacts\daemon-x86_64\wsa-btd" "artifacts\wsa-module\bin\x86_64\wsa-btd"
           Copy-Item "artifacts\daemon-arm64-v8a\wsa-btd" "artifacts\wsa-module\bin\arm64-v8a\wsa-btd"
+          Copy-Item "artifacts\audio-hal-x86_64\audio.wsa_bridge.default.so" "artifacts\wsa-module\hal\x86_64\audio.wsa_bridge.default.so"
+          Copy-Item "artifacts\audio-hal-arm64-v8a\audio.wsa_bridge.default.so" "artifacts\wsa-module\hal\arm64-v8a\audio.wsa_bridge.default.so"
           Compress-Archive -Path "artifacts\wsa-module\*" -DestinationPath "artifacts\wsa-system-module.zip" -Force
 
       - name: Upload WSA system module
