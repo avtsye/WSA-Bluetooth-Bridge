@@ -93,11 +93,11 @@ if ($LASTEXITCODE -ne 0 -or $root -notmatch 'uid=0') {
     }
 
     $upgradeProcess = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList @(
-        '-ExecutionPolicy','Bypass','-NoProfile','-File',('"' + $upgrade + '"')
+        '-ExecutionPolicy','Bypass','-NoProfile','-File',('"' + $upgrade + '"'),'-ForceRoot'
     )
 
     if ($upgradeProcess.ExitCode -ne 0) {
-        Write-Host ('שדרוג WSA לא הושלם. קוד יציאה: ' + $upgradeProcess.ExitCode)
+        Write-Host ('שדרוג WSA עם Root/Magisk לא הושלם. קוד יציאה: ' + $upgradeProcess.ExitCode)
         exit 4
     }
 
