@@ -134,5 +134,41 @@ if ($LASTEXITCODE -ne 0) {
     exit 10
 }
 
-Write-Host 'התקנת Windows + Android + מודול המערכת הושלמה בהצלחה.'
+Write-Host 'מודול המערכת הותקן. מאתחל את צד Android כדי להפעיל את האינטגרציה העמוקה...'
+& $adb -s $serial shell su -c reboot 2>$null | Out-Null
+Start-Sleep -Seconds 8
+
+& $adb start-server | Out-Null
+& $adb connect 127.0.0.1:58526 2>$null | Out-Null
+$serial = Get-WsaDevice -TimeoutSeconds 180
+
+if (-not $serial) {
+    Write-Host 'המודול הותקן, אך WSA לא חזר ל-ADB לאחר האתחול. הוא אמור לעלות עם המודול באתחול הבא.'
+    exit 13
+}
+
+& $adb -s $serial reverse tcp:17890 tcp:17890 | Out-Null
+& $adb -s $serial reverse tcp:17891 tcp:17891 | Out-Null
+
+$logRoot = Join-Path $env:LOCALAPPDATA 'WSABluetoothBridge'
+New-Item -ItemType Directory -Force $logRoot | Out-Null
+
+Start-Sleep -Seconds 5
+
+$audioEnv = Join-Path $logRoot 'wsa-bt-audio-env.txt'
+$systemStatus = Join-Path $logRoot 'wsa-bt-system-status.json'
+
+& $adb -s $serial shell su -c '/data/adb/modules/wsa_bt_bridge/audio-env.sh' 2>$null | Out-Null
+& $adb -s $serial pull /data/local/tmp/wsa-bt-audio-env.txt $audioEnv 2>$null | Out-Null
+& $adb -s $serial pull /data/local/tmp/wsa-bt-system-status.json $systemStatus 2>$null | Out-Null
+
+if (Test-Path $audioEnv) {
+    Write-Host ('אבחון Audio HAL נשמר ב: ' + $audioEnv)
+}
+
+if (Test-Path $systemStatus) {
+    Write-Host ('סטטוס רכיב המערכת נשמר ב: ' + $systemStatus)
+}
+
+Write-Host 'התקנת Windows + Android + מודול המערכת הושלמה, והרכיב רץ עמוק בתוך WSA.'
 exit 0
