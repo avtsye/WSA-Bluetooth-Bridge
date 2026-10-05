@@ -7,6 +7,7 @@ using System.Text.Json;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Advertisement;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
+using Windows.Devices.Enumeration;
 using Windows.Storage.Streams;
 
 const int port = 17890;
@@ -134,36 +135,39 @@ static async Task RunSessionAsync(TcpClient client)
                                 timestamp = args.Timestamp.ToUniversalTime().ToString("O")
                             });
 
-                            // Many BLE peripherals omit Local Name from their advertisements.
-                            // Resolve a friendly Windows device name once per address and send an
-                            // updated scan result when one is available.
-                            if (string.IsNullOrWhiteSpace(localName) &&
-                                resolvingNames.TryAdd(args.BluetoothAddress, 0))
+                            // Advertisement names are often absent or shortened. Resolve the
+                            // Windows DeviceInformation name once for every address and send an
+                            // updated result even when the advertisement already had a short name.
+                            if (resolvingNames.TryAdd(args.BluetoothAddress, 0))
                             {
-                                try
+                                _ = Task.Run(async () =>
                                 {
-                                    using var discoveredDevice =
-                                        await BluetoothLEDevice.FromBluetoothAddressAsync(args.BluetoothAddress);
-
-                                    if (discoveredDevice is not null &&
-                                        !string.IsNullOrWhiteSpace(discoveredDevice.Name))
+                                    try
                                     {
-                                        await SendAsync(new
+                                        var resolvedName =
+                                            await ResolveFriendlyNameAsync(args.BluetoothAddress);
+
+                                        if (!string.IsNullOrWhiteSpace(resolvedName) &&
+                                            !string.Equals(resolvedName, localName,
+                                                StringComparison.Ordinal))
                                         {
-                                            type = "scan.result",
-                                            address = args.BluetoothAddress.ToString("X12"),
-                                            rssi = args.RawSignalStrengthInDBm,
-                                            name = discoveredDevice.Name,
-                                            nameSource = "windows-device",
-                                            serviceUuids,
-                                            timestamp = args.Timestamp.ToUniversalTime().ToString("O")
-                                        });
+                                            await SendAsync(new
+                                            {
+                                                type = "scan.result",
+                                                address = args.BluetoothAddress.ToString("X12"),
+                                                rssi = args.RawSignalStrengthInDBm,
+                                                name = resolvedName,
+                                                nameSource = "windows-device-information",
+                                                serviceUuids,
+                                                timestamp = DateTimeOffset.UtcNow.ToString("O")
+                                            });
+                                        }
                                     }
-                                }
-                                catch
-                                {
-                                    // Name resolution is best-effort; scanning must continue.
-                                }
+                                    catch
+                                    {
+                                        // Friendly-name resolution is best-effort only.
+                                    }
+                                });
                             }
                         };
 
@@ -418,4 +422,52 @@ static string BufferToHex(IBuffer buffer)
     var bytes = new byte[buffer.Length];
     reader.ReadBytes(bytes);
     return Convert.ToHexString(bytes);
+}
+
+
+static async Task<string?> ResolveFriendlyNameAsync(ulong address)
+{
+    using var ble = await BluetoothLEDevice.FromBluetoothAddressAsync(address);
+    if (ble is null)
+        return null;
+
+    string? best = string.IsNullOrWhiteSpace(ble.Name) ? null : ble.Name.Trim();
+
+    try
+    {
+        var info = await DeviceInformation.CreateFromIdAsync(
+            ble.DeviceId,
+            new[]
+            {
+                "System.ItemNameDisplay",
+                "System.Devices.FriendlyName",
+                "System.Devices.DeviceInstanceId"
+            });
+
+        if (info is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(info.Name) &&
+                (best is null || info.Name.Trim().Length > best.Length))
+            {
+                best = info.Name.Trim();
+            }
+
+            foreach (var key in new[] { "System.Devices.FriendlyName", "System.ItemNameDisplay" })
+            {
+                if (info.Properties.TryGetValue(key, out var value) &&
+                    value is string text &&
+                    !string.IsNullOrWhiteSpace(text) &&
+                    (best is null || text.Trim().Length > best.Length))
+                {
+                    best = text.Trim();
+                }
+            }
+        }
+    }
+    catch
+    {
+        // Some unpaired devices do not expose all DeviceInformation properties.
+    }
+
+    return best;
 }
