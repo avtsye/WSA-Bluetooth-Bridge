@@ -29,9 +29,9 @@ function Restart-Elevated {
     $args = @('-ExecutionPolicy','Bypass','-NoProfile','-File',('"' + $PSCommandPath + '"'))
     if ($Resume) { $args += '-Resume' }
     if ($ForceRoot) { $args += '-ForceRoot' }
-    Start-Process powershell.exe -Verb RunAs -ArgumentList ($args -join ' ')
+    $elevated = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList ($args -join ' ')
     try { Stop-Transcript | Out-Null } catch {}
-    exit 0
+    exit $elevated.ExitCode
 }
 
 function Get-WslDistro {
