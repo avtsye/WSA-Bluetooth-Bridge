@@ -1,8 +1,9 @@
-$ErrorActionPreference = 'Stop'
-
 param(
-    [switch]$Resume
+    [switch]$Resume,
+    [switch]$ForceRoot
 )
+
+$ErrorActionPreference = 'Stop'
 
 $base = Split-Path -Parent $MyInvocation.MyCommand.Path
 $stateRoot = Join-Path $env:LOCALAPPDATA 'WSABluetoothBridge'
@@ -25,6 +26,7 @@ function Test-Administrator {
 function Restart-Elevated {
     $args = @('-ExecutionPolicy','Bypass','-NoProfile','-File',('"' + $PSCommandPath + '"'))
     if ($Resume) { $args += '-Resume' }
+    if ($ForceRoot) { $args += '-ForceRoot' }
     Start-Process powershell.exe -Verb RunAs -ArgumentList ($args -join ' ')
     Stop-Transcript | Out-Null
     exit 0
@@ -119,6 +121,10 @@ function Backup-WsaData {
 }
 
 function Confirm-Replacement([string]$BackupPath) {
+    if ($ForceRoot) {
+        return $true
+    }
+
     Add-Type -AssemblyName System.Windows.Forms
     $backupText = if ($BackupPath) { 'גיבוי נוצר ב: ' + $BackupPath } else { 'לא נמצא userdata.vhdx לגיבוי.' }
     $message = 'ה-WSA המותאם נבנה בהצלחה. כעת יש להחליף את התקנת WSA הקיימת. ' + $backupText + [Environment]::NewLine + [Environment]::NewLine + 'להמשיך בהחלפה?'
