@@ -25,27 +25,18 @@ if [ -z "$POLICY" ]; then
   exit 0
 fi
 
-RSM64=""
-RSM32=""
-for f in /vendor/lib64/hw/audio.r_submix.default.so /system/lib64/hw/audio.r_submix.default.so; do
-  [ -f "$f" ] && RSM64="$f" && break
-done
-for f in /vendor/lib/hw/audio.r_submix.default.so /system/lib/hw/audio.r_submix.default.so; do
-  [ -f "$f" ] && RSM32="$f" && break
-done
-
-if [ -z "$RSM64" ] && [ -z "$RSM32" ]; then
-  log "Remote-submix HAL not present; cannot create safe secondary audio module"
-  echo '{"compatible":false,"enabled":false,"reason":"remote_submix_missing"}' > "$STATE"
+HAL64="$MODDIR/system/vendor/lib64/hw/audio.wsa_bridge.default.so"
+if [ ! -f "$HAL64" ]; then
+  log "WSA bridge Audio HAL binary missing from module"
+  echo '{"compatible":false,"enabled":false,"reason":"bridge_hal_missing"}' > "$STATE"
   exit 0
 fi
 
 cp -f "$POLICY" "$WORK/original.xml"
 
-# This first deep-integration stage uses Android's existing remote-submix HAL as
-# a safe secondary software audio endpoint. It does NOT replace the primary HAL.
-# The bridge-specific binary transport remains in wsa-btd; a later adapter
-# connects this endpoint to the PCM socket once the exact WSA HAL/API is known.
+# Add WSA Bridge as a secondary software Audio HAL. It does NOT replace the
+# primary WSA HAL. PCM is transported by audio.wsa_bridge.default.so through
+# @wsa_bt_audio into wsa-btd and then to the Windows host.
 PATCHED="$WORK/patched.xml"
 cp -f "$POLICY" "$PATCHED"
 
