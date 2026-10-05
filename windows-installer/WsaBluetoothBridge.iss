@@ -1,6 +1,6 @@
 ; WSA Bluetooth Bridge installer
 #define MyAppName "WSA Bluetooth Bridge"
-#define MyAppVersion "0.8.2"
+#define MyAppVersion "0.8.3"
 #define MyAppPublisher "avtsye"
 #define MyAppExeName "WsaBluetoothHost.exe"
 
