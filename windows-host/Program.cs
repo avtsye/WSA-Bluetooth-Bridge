@@ -355,10 +355,15 @@ static async Task RunSessionAsync(TcpClient client)
                         // stronger end-to-end test than merely creating BluetoothLEDevice.
                         var probe = await device.GetGattServicesAsync(BluetoothCacheMode.Uncached);
 
+                        var verified = probe.Status == GattCommunicationStatus.Success &&
+                                       probe.Services.Count > 0;
+
                         await SendAsync(new
                         {
                             type = "device.connection",
-                            state = probe.Status == GattCommunicationStatus.Success ? "connected" : "failed",
+                            state = verified ? "connected" : "failed",
+                            verified,
+                            verification = verified ? "uncached-gatt-services" : "uncached-gatt-services-failed",
                             address = address.ToString("X12"),
                             name = device.Name,
                             windowsStatus = device.ConnectionStatus.ToString(),
