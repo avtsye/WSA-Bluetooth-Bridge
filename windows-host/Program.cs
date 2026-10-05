@@ -74,6 +74,7 @@ static async Task RunSessionAsync(TcpClient client)
             "gatt.discover",
             "gatt.read",
             "audio.outputs",
+            "audio.routes",
             "audio.test"
         }
     });
@@ -332,6 +333,41 @@ static async Task RunSessionAsync(TcpClient client)
                         watcher = null;
                         await SendAsync(new { type = "scan.state", state = "stopped" });
                         break;
+
+                    case "audio.routes":
+                    {
+                        using var enumerator = new MMDeviceEnumerator();
+
+                        var render = enumerator
+                            .EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
+                            .Select(endpoint => new
+                            {
+                                id = endpoint.ID,
+                                name = endpoint.FriendlyName,
+                                flow = "render",
+                                state = endpoint.State.ToString()
+                            })
+                            .ToArray();
+
+                        var capture = enumerator
+                            .EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
+                            .Select(endpoint => new
+                            {
+                                id = endpoint.ID,
+                                name = endpoint.FriendlyName,
+                                flow = "capture",
+                                state = endpoint.State.ToString()
+                            })
+                            .ToArray();
+
+                        await SendAsync(new
+                        {
+                            type = "audio.routes.result",
+                            render,
+                            capture
+                        });
+                        break;
+                    }
 
                     case "audio.outputs":
                     {
