@@ -20,10 +20,14 @@ import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -44,6 +48,10 @@ public final class MainActivity extends Activity {
     private final ArrayList<String> audioEndpointIds = new ArrayList<>();
     private final ArrayList<String> audioEndpointNames = new ArrayList<>();
     private ArrayAdapter<String> audioAdapter;
+    private Spinner audioInputsSpinner;
+    private final ArrayList<String> audioInputIds = new ArrayList<>();
+    private final ArrayList<String> audioInputNames = new ArrayList<>();
+    private ArrayAdapter<String> audioInputAdapter;
     private TextView audioStatus;
     private EditText serviceUuid;
     private EditText characteristicUuid;
@@ -107,15 +115,23 @@ public final class MainActivity extends Activity {
         audioTitle.setPadding(0, 18, 0, 8);
 
         Button loadAudioOutputs = new Button(this);
-        loadAudioOutputs.setText("טען יציאות שמע של Windows");
+        loadAudioOutputs.setText("טען יציאות שמע ומיקרופונים של Windows");
 
         audioOutputsSpinner = new Spinner(this);
         audioAdapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item, audioEndpointNames);
         audioOutputsSpinner.setAdapter(audioAdapter);
 
+        audioInputsSpinner = new Spinner(this);
+        audioInputAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, audioInputNames);
+        audioInputsSpinner.setAdapter(audioInputAdapter);
+
         Button playTestTone = new Button(this);
         playTestTone.setText("השמע צליל בדיקה באוזניה שנבחרה");
+
+        Button duplexTest = new Button(this);
+        duplexTest.setText("בדיקת Duplex: שמע יוצא + מיקרופון חוזר");
 
         audioStatus = new TextView(this);
         audioStatus.setText("בדיקת שמע: טרם בוצעה");
@@ -156,7 +172,9 @@ public final class MainActivity extends Activity {
         root.addView(audioTitle);
         root.addView(loadAudioOutputs);
         root.addView(audioOutputsSpinner);
+        root.addView(audioInputsSpinner);
         root.addView(playTestTone);
+        root.addView(duplexTest);
         root.addView(audioStatus);
         root.addView(discover);
         root.addView(serviceUuid);
@@ -202,7 +220,9 @@ public final class MainActivity extends Activity {
                 send("{\"type\":\"device.disconnect\"}"));
 
         loadAudioOutputs.setOnClickListener(v ->
-                send("{\"type\":\"audio.outputs\"}"));
+                send("{\"type\":\"audio.routes\"}"));
+
+        duplexTest.setOnClickListener(v -> runDuplexAudioTest());
 
         playTestTone.setOnClickListener(v -> {
             int position = audioOutputsSpinner.getSelectedItemPosition();
@@ -263,6 +283,8 @@ public final class MainActivity extends Activity {
                             updateConnectionStatus(object);
                         } else if ("audio.outputs.result".equals(type)) {
                             updateAudioOutputs(object);
+                        } else if ("audio.routes.result".equals(type)) {
+                            updateAudioRoutes(object);
                         } else if ("audio.test.result".equals(type)) {
                             updateAudioTestStatus(object);
                         }
@@ -277,6 +299,203 @@ public final class MainActivity extends Activity {
                 append("החיבור נכשל: " + e);
             }
         }, "wsa-bt-reader").start();
+    }
+
+    private void updateAudioRoutes(JSONObject object) {
+        JSONArray render = object.optJSONArray("render");
+        JSONArray capture = object.optJSONArray("capture");
+
+        main.post(() -> {
+            audioEndpointIds.clear();
+            audioEndpointNames.clear();
+            audioInputIds.clear();
+            audioInputNames.clear();
+
+            if (render != null) {
+                for (int i = 0; i < render.length(); i++) {
+                    JSONObject item = render.optJSONObject(i);
+                    if (item == null) continue;
+                    String id = item.optString("id", "");
+                    if (id.isEmpty()) continue;
+                    audioEndpointIds.add(id);
+                    audioEndpointNames.add(item.optString("name", "יציאת שמע ללא שם"));
+                }
+            }
+
+            if (capture != null) {
+                for (int i = 0; i < capture.length(); i++) {
+                    JSONObject item = capture.optJSONObject(i);
+                    if (item == null) continue;
+                    String id = item.optString("id", "");
+                    if (id.isEmpty()) continue;
+                    audioInputIds.add(id);
+                    audioInputNames.add(item.optString("name", "מיקרופון ללא שם"));
+                }
+            }
+
+            audioAdapter.notifyDataSetChanged();
+            audioInputAdapter.notifyDataSetChanged();
+
+            audioStatus.setText(
+                    "נמצאו " + audioEndpointIds.size() + " יציאות שמע ו־" +
+                    audioInputIds.size() + " כניסות מיקרופון."
+            );
+        });
+    }
+
+    private void runDuplexAudioTest() {
+        int renderPosition = audioOutputsSpinner.getSelectedItemPosition();
+        int capturePosition = audioInputsSpinner.getSelectedItemPosition();
+
+        if (renderPosition < 0 || renderPosition >= audioEndpointIds.size()) {
+            audioStatus.setText("❌ בחר יציאת שמע לאוזניה");
+            return;
+        }
+        if (capturePosition < 0 || capturePosition >= audioInputIds.size()) {
+            audioStatus.setText("❌ בחר את מיקרופון האוזניה");
+            return;
+        }
+
+        final String renderId = audioEndpointIds.get(renderPosition);
+        final String captureId = audioInputIds.get(capturePosition);
+
+        audioStatus.setText("בדיקת Duplex: מכין שמע ומיקרופון...");
+
+        new Thread(() -> {
+            Socket audioSocket = null;
+            try {
+                JSONObject route = new JSONObject();
+                route.put("type", "audio.route.select");
+                route.put("renderEndpointId", renderId);
+                route.put("captureEndpointId", captureId);
+                send(route.toString());
+
+                JSONObject playback = new JSONObject();
+                playback.put("type", "audio.playback.start");
+                playback.put("sampleRate", 48000);
+                playback.put("channels", 2);
+                playback.put("sampleFormat", "s16le");
+                send(playback.toString());
+
+                send("{\"type\":\"audio.capture.start\"}");
+                Thread.sleep(500);
+
+                audioSocket = new Socket();
+                audioSocket.connect(new InetSocketAddress("127.0.0.1", 17891), 5000);
+                audioSocket.setSoTimeout(4000);
+
+                DataOutputStream output = new DataOutputStream(audioSocket.getOutputStream());
+                DataInputStream input = new DataInputStream(audioSocket.getInputStream());
+
+                byte[] pcm = createTestTonePcm(48000, 2, 880.0, 1000);
+                int offset = 0;
+                int sequence = 0;
+                final int frameBytes = 3840;
+
+                while (offset < pcm.length) {
+                    int size = Math.min(frameBytes, pcm.length - offset);
+                    writeAudioFrame(output, 1, sequence++, pcm, offset, size);
+                    offset += size;
+                    Thread.sleep(18);
+                }
+                output.flush();
+
+                long deadline = System.currentTimeMillis() + 3000;
+                long capturedBytes = 0;
+                int captureFrames = 0;
+                byte[] header = new byte[16];
+
+                while (System.currentTimeMillis() < deadline) {
+                    try {
+                        input.readFully(header);
+                    } catch (java.net.SocketTimeoutException timeout) {
+                        break;
+                    }
+
+                    if (header[0] != 'W' || header[1] != 'S' ||
+                            header[2] != 'A' || header[3] != 'B') {
+                        throw new IllegalStateException("כותרת WSAB לא תקינה");
+                    }
+
+                    ByteBuffer hb = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN);
+                    int streamId = header[5] & 0xFF;
+                    int length = hb.getInt(8);
+                    if (length < 0 || length > 1024 * 1024) {
+                        throw new IllegalStateException("מסגרת אודיו גדולה מדי");
+                    }
+
+                    byte[] payload = new byte[length];
+                    input.readFully(payload);
+
+                    if (streamId == 2) {
+                        capturedBytes += length;
+                        captureFrames++;
+                        if (capturedBytes >= 4096) break;
+                    }
+                }
+
+                final long finalCapturedBytes = capturedBytes;
+                final int finalCaptureFrames = captureFrames;
+                main.post(() -> {
+                    if (finalCapturedBytes > 0) {
+                        audioStatus.setText(
+                                "✅ Duplex עובד בשני הכיוונים\n" +
+                                "נשלח PCM לאוזניה ונקלטו " + finalCapturedBytes +
+                                " בתים מהמיקרופון (" + finalCaptureFrames + " מסגרות)."
+                        );
+                    } else {
+                        audioStatus.setText(
+                                "⚠️ האודיו היוצא נשלח, אבל לא התקבל PCM מהמיקרופון.\n" +
+                                "בדוק שנבחר מיקרופון של אותה אוזניה."
+                        );
+                    }
+                });
+            } catch (Exception e) {
+                final String message = e.toString();
+                main.post(() -> audioStatus.setText("❌ בדיקת Duplex נכשלה\n" + message));
+            } finally {
+                send("{\"type\":\"audio.capture.stop\"}");
+                send("{\"type\":\"audio.playback.stop\"}");
+                try {
+                    if (audioSocket != null) audioSocket.close();
+                } catch (Exception ignored) {
+                }
+            }
+        }, "wsa-audio-duplex-test").start();
+    }
+
+    private static byte[] createTestTonePcm(int sampleRate, int channels,
+                                             double frequency, int durationMs) {
+        int frames = sampleRate * durationMs / 1000;
+        ByteBuffer buffer = ByteBuffer.allocate(frames * channels * 2)
+                .order(ByteOrder.LITTLE_ENDIAN);
+
+        for (int i = 0; i < frames; i++) {
+            double phase = 2.0 * Math.PI * frequency * i / sampleRate;
+            short sample = (short) (Math.sin(phase) * 0.12 * Short.MAX_VALUE);
+            for (int channel = 0; channel < channels; channel++) {
+                buffer.putShort(sample);
+            }
+        }
+        return buffer.array();
+    }
+
+    private static void writeAudioFrame(DataOutputStream output, int streamId,
+                                        int sequence, byte[] data, int offset, int length)
+            throws Exception {
+        ByteBuffer header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN);
+        header.put((byte) 'W');
+        header.put((byte) 'S');
+        header.put((byte) 'A');
+        header.put((byte) 'B');
+        header.put((byte) 1);
+        header.put((byte) streamId);
+        header.putShort((short) 0);
+        header.putInt(length);
+        header.putInt(sequence);
+
+        output.write(header.array());
+        output.write(data, offset, length);
     }
 
     private void updateAudioOutputs(JSONObject object) {
