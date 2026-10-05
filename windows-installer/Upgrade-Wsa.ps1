@@ -17,6 +17,7 @@ New-Item -ItemType Directory -Force $stateRoot | Out-Null
 New-Item -ItemType Directory -Force $builderRoot | Out-Null
 New-Item -ItemType Directory -Force $backupRoot | Out-Null
 Start-Transcript -Path $logFile -Append | Out-Null
+Set-Content -Path (Join-Path $stateRoot 'root-upgrade-invoked.txt') -Value ('Upgrade-Wsa invoked: ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) -Encoding UTF8
 
 function Test-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
