@@ -37,6 +37,23 @@ internal sealed class AdbReverseManager : IDisposable
 
                 if (devices.Count == 0)
                 {
+                    foreach (var endpoint in new[] { "127.0.0.1:58526", "localhost:58526" })
+                    {
+                        try
+                        {
+                            await RunAdbAsync(adb, $"connect {endpoint}", cancellationToken);
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    devicesText = await RunAdbAsync(adb, "devices", cancellationToken);
+                    devices = ParseDevices(devicesText);
+                }
+
+                if (devices.Count == 0)
+                {
                     Console.WriteLine("Waiting for WSA/ADB device...");
                 }
                 else
