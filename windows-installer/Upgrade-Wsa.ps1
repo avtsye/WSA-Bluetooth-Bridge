@@ -289,7 +289,17 @@ try {
     exit 0
 }
 catch {
-    Write-Error $_
+    $message = ($_ | Out-String).Trim()
+    Write-Host ''
+    Write-Host '============================================' -ForegroundColor Red
+    Write-Host 'WSA Bluetooth Bridge - ROOT UPGRADE FAILED' -ForegroundColor Red
+    Write-Host '============================================' -ForegroundColor Red
+    Write-Host $message -ForegroundColor Red
+    Write-Host ''
+    Write-Host ('Log: ' + $logFile) -ForegroundColor Yellow
+    Write-Host ('Report: ' + $reportFile) -ForegroundColor Yellow
+    Write-Host ''
     try { Stop-Transcript | Out-Null } catch {}
+    [void](Read-Host 'השגיאה נשארת פתוחה. לחץ Enter רק לאחר שהעתקת/צילמת אותה')
     exit 1
 }
