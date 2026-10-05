@@ -139,6 +139,10 @@ jobs:
           Copy-Item "android-system-module\post-fs-data.sh" "artifacts\wsa-module\post-fs-data.sh"
           Copy-Item "android-system-module\uninstall.sh" "artifacts\wsa-module\uninstall.sh"
           Copy-Item "android-system-module\audio-env.sh" "artifacts\wsa-module\audio-env.sh"
+          Copy-Item "android-system-module\policy-shim.sh" "artifacts\wsa-module\policy-shim.sh"
+          Copy-Item "android-system-module\health-check.sh" "artifacts\wsa-module\health-check.sh"
+          Copy-Item "android-system-module\enable-policy.sh" "artifacts\wsa-module\enable-policy.sh"
+          Copy-Item "android-system-module\disable-policy.sh" "artifacts\wsa-module\disable-policy.sh"
           Copy-Item "artifacts\daemon-x86_64\wsa-btd" "artifacts\wsa-module\bin\x86_64\wsa-btd"
           Copy-Item "artifacts\daemon-arm64-v8a\wsa-btd" "artifacts\wsa-module\bin\arm64-v8a\wsa-btd"
           Compress-Archive -Path "artifacts\wsa-module\*" -DestinationPath "artifacts\wsa-system-module.zip" -Force
