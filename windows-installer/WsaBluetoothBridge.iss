@@ -20,6 +20,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
 WizardStyle=modern
 UninstallDisplayIcon={app}\{#MyAppExeName}
+SetupIconFile=..\artifacts\windows-host-lite\app.ico
 SetupLogging=yes
 
 [Files]
