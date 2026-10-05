@@ -85,13 +85,46 @@ if ($LASTEXITCODE -ne 0) {
 # Full system integration requires root/Magisk in WSA.
 $root = & $adb -s $serial shell su -c id 2>&1
 if ($LASTEXITCODE -ne 0 -or $root -notmatch 'uid=0') {
-    Write-Host 'האפליקציה הותקנה, אך ל-WSA אין root/Magisk ולכן לא ניתן להתקין את רכיב המערכת העמוק.'
-    exit 4
+    Write-Host 'ל-WSA אין root/Magisk. מפעיל את מסייע השדרוג הבטוח...'
+    $upgrade = Join-Path $base 'Upgrade-Wsa.ps1'
+    if (-not (Test-Path $upgrade)) {
+        Write-Host 'קובץ Upgrade-Wsa.ps1 חסר.'
+        exit 4
+    }
+
+    $upgradeProcess = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList @(
+        '-ExecutionPolicy','Bypass','-NoProfile','-File',('"' + $upgrade + '"')
+    )
+
+    if ($upgradeProcess.ExitCode -ne 0) {
+        Write-Host ('שדרוג WSA לא הושלם. קוד יציאה: ' + $upgradeProcess.ExitCode)
+        exit 4
+    }
+
+    & $adb start-server | Out-Null
+    & $adb connect 127.0.0.1:58526 2>$null | Out-Null
+    Start-Sleep -Seconds 5
+    $serial = Get-WsaDevice -TimeoutSeconds 120
+    if (-not $serial) {
+        Write-Host 'WSA המותאם הותקן, אך הוא עדיין לא הופיע ב-ADB.'
+        exit 11
+    }
+
+    & $adb -s $serial install -r $apk
+    & $adb -s $serial reverse tcp:17890 tcp:17890 | Out-Null
+    & $adb -s $serial reverse tcp:17891 tcp:17891 | Out-Null
+    & $adb -s $serial push $module /data/local/tmp/wsa-system-module.zip
+
+    $root = & $adb -s $serial shell su -c id 2>&1
+    if ($LASTEXITCODE -ne 0 -or $root -notmatch 'uid=0') {
+        Write-Host 'השדרוג הסתיים אך root עדיין אינו זמין.'
+        exit 12
+    }
 }
 
 $magisk = & $adb -s $serial shell su -c 'command -v magisk' 2>&1
 if ($LASTEXITCODE -ne 0 -or -not $magisk) {
-    Write-Host 'נמצאה הרשאת root, אך Magisk לא נמצא. האפליקציה הותקנה אך מודול המערכת לא הותקן.'
+    Write-Host 'נמצאה הרשאת root, אך Magisk לא נמצא.'
     exit 5
 }
 
