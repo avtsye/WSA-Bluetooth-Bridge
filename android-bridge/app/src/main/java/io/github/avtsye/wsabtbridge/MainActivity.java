@@ -68,6 +68,9 @@ public final class MainActivity extends Activity {
         Button stop = new Button(this);
         stop.setText("עצור סריקה");
 
+        Button deepScan = new Button(this);
+        deepScan.setText("סריקה עמוקה: BLE + Bluetooth Classic + התקנים מוכרים");
+
         devicesSpinner = new Spinner(this);
         deviceAdapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item, deviceDisplay);
@@ -108,6 +111,7 @@ public final class MainActivity extends Activity {
         root.addView(connectHost);
         root.addView(scan);
         root.addView(stop);
+        root.addView(deepScan);
         root.addView(devicesSpinner);
         root.addView(address);
         root.addView(connectDevice);
@@ -124,6 +128,7 @@ public final class MainActivity extends Activity {
         connectHost.setOnClickListener(v -> connect());
         scan.setOnClickListener(v -> send("{\"type\":\"scan.start\"}"));
         stop.setOnClickListener(v -> send("{\"type\":\"scan.stop\"}"));
+        deepScan.setOnClickListener(v -> send("{\"type\":\"scan.deep\"}"));
 
         devicesSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override
@@ -188,7 +193,8 @@ public final class MainActivity extends Activity {
                 while ((line = reader.readLine()) != null) {
                     try {
                         JSONObject object = new JSONObject(line);
-                        if ("scan.result".equals(object.optString("type"))) {
+                        String type = object.optString("type");
+                        if ("scan.result".equals(type) || "device.catalog.result".equals(type)) {
                             updateDeviceList(object);
                         }
                         append(object.toString(2));
@@ -209,7 +215,10 @@ public final class MainActivity extends Activity {
         if (foundAddress.isEmpty()) return;
 
         final String incomingName = object.optString("name", "").trim();
-        final int rssi = object.optInt("rssi", 0);
+        final int rssi = object.optInt("rssi", Integer.MIN_VALUE);
+        final String transport = object.optString("transport", "BLE").trim();
+        final boolean paired = object.optBoolean("paired", false);
+        final boolean connected = object.optBoolean("connected", false);
 
         main.post(() -> {
             String currentName = deviceNames.get(foundAddress);
@@ -227,10 +236,23 @@ public final class MainActivity extends Activity {
                 currentName = "התקן ללא שם";
             }
 
-            String label = currentName + "\n"
-                    + foundAddress + "   •   RSSI " + rssi;
+            StringBuilder label = new StringBuilder();
+            label.append(currentName).append("\n")
+                    .append(foundAddress)
+                    .append("   •   ")
+                    .append(transport);
 
-            deviceLabels.put(foundAddress, label);
+            if (rssi != Integer.MIN_VALUE) {
+                label.append("   •   RSSI ").append(rssi);
+            }
+            if (paired) {
+                label.append("   •   מזווג");
+            }
+            if (connected) {
+                label.append("   •   מחובר");
+            }
+
+            deviceLabels.put(foundAddress, label.toString());
             deviceAddresses.clear();
             deviceDisplay.clear();
 
