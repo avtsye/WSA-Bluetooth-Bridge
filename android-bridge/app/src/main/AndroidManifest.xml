@@ -3,11 +3,12 @@
 
     <application
         android:allowBackup="false"
-        android:label="WSA Bluetooth Bridge Client"
+        android:label="גשר Bluetooth ל־WSA"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
             android:name=".MainActivity"
+            android:screenOrientation="unspecified"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
