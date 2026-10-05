@@ -1,6 +1,6 @@
 ; WSA Bluetooth Bridge installer
 #define MyAppName "WSA Bluetooth Bridge"
-#define MyAppVersion "0.8.1"
+#define MyAppVersion "0.8.2"
 #define MyAppPublisher "avtsye"
 #define MyAppExeName "WsaBluetoothHost.exe"
 
@@ -42,8 +42,9 @@ Name: "autostart"; Description: "הפעל את WSA Bluetooth Bridge אוטומט
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "WSABluetoothBridge"; ValueData: """{app}\{#MyAppExeName}"" --background"; Tasks: autostart; Flags: uninsdeletevalue
 
 [Run]
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NoProfile -File ""{app}\Upgrade-Wsa.ps1"" -ForceRoot"; StatusMsg: "מכין WSA עם Root/Magisk..."; Flags: waituntilterminated
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NoProfile -File ""{app}\Install-WsaSystem.ps1"""; StatusMsg: "מתקין את רכיב Android/Audio HAL..."; Flags: waituntilterminated
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--background"; Flags: nowait runhidden
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NoProfile -File ""{app}\Install-WsaSystem.ps1"""; StatusMsg: "מתקין Root/Magisk ורכיב Android/WSA..."; Flags: waituntilterminated
 
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/C taskkill /IM WsaBluetoothHost.exe /F"; Flags: runhidden; RunOnceId: "StopBridge"
