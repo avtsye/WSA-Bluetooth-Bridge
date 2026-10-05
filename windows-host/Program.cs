@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Runtime.InteropServices;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
@@ -12,6 +13,9 @@ using Windows.Devices.Bluetooth.Advertisement;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
 using Windows.Devices.Enumeration;
 using Windows.Storage.Streams;
+
+if (args.Any(x => string.Equals(x, "--background", StringComparison.OrdinalIgnoreCase)))
+    BackgroundMode.HideConsole();
 
 const int port = 17890;
 const int audioPort = 17891;
@@ -793,4 +797,23 @@ static string? BestDeviceInformationName(DeviceInformation info)
     }
 
     return best;
+}
+
+
+internal static class BackgroundMode
+{
+    private const int SwHide = 0;
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetConsoleWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    public static void HideConsole()
+    {
+        var hwnd = GetConsoleWindow();
+        if (hwnd != IntPtr.Zero)
+            ShowWindow(hwnd, SwHide);
+    }
 }
