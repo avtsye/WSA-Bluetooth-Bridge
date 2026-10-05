@@ -33,6 +33,7 @@ adb connect <WSA-IP:PORT>
 
 ```powershell
 adb reverse tcp:17890 tcp:17890
+adb reverse tcp:17891 tcp:17891
 ```
 
 This is intentionally temporary. It proves transport without requiring a permanent network listener on Windows.
@@ -65,3 +66,22 @@ Success at this stage proves:
 - BLE discovery events survive the bridge protocol.
 
 It does **not** yet mean Android's normal `BluetoothAdapter`/`BluetoothLeScanner` APIs work. That is the next integration milestone.
+
+
+## Duplex audio test
+
+The diagnostic Android client now uses a second local transport for PCM audio.
+
+- Control / Bluetooth JSONL: `127.0.0.1:17890`
+- Binary PCM audio: `127.0.0.1:17891`
+
+Before running the duplex test, reverse both ports with ADB. Then load Windows audio routes in the app, select the headset render endpoint and the matching headset microphone capture endpoint, and run the Duplex test.
+
+A successful result means PCM traveled both directions:
+
+```text
+WSA -> Windows host -> headset output
+headset microphone -> Windows host -> WSA
+```
+
+This validates the bridge data plane before Android AudioFlinger integration.
