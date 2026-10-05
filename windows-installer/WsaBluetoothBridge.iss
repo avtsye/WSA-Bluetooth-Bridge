@@ -25,6 +25,7 @@ SetupLogging=yes
 [Files]
 Source: "..\artifacts\windows-host-lite\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\artifacts\wsa-system-module.zip"; DestDir: "{app}"; Flags: ignoreversion
+Source: "Install-WsaSystem.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\WSA Bluetooth Bridge"; Filename: "{app}\{#MyAppExeName}"
