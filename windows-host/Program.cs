@@ -66,6 +66,7 @@ static async Task RunSessionAsync(TcpClient client)
         capabilities = new[]
         {
             "ble.scan",
+            "bluetooth.deep-scan",
             "ble.connect",
             "gatt.discover",
             "gatt.read"
@@ -132,6 +133,12 @@ static async Task RunSessionAsync(TcpClient client)
                                 name = string.IsNullOrWhiteSpace(localName) ? null : localName,
                                 nameSource = string.IsNullOrWhiteSpace(localName) ? null : "advertisement",
                                 serviceUuids,
+                                manufacturerData = args.Advertisement.ManufacturerData.Select(m => new
+                                {
+                                    companyId = m.CompanyId,
+                                    dataHex = BufferToHex(m.Data)
+                                }).ToArray(),
+                                transport = "BLE-advertisement",
                                 timestamp = args.Timestamp.ToUniversalTime().ToString("O")
                             });
 
@@ -159,6 +166,7 @@ static async Task RunSessionAsync(TcpClient client)
                                                 name = resolvedName,
                                                 nameSource = "windows-device-information",
                                                 serviceUuids,
+                                                transport = "BLE-advertisement",
                                                 timestamp = DateTimeOffset.UtcNow.ToString("O")
                                             });
                                         }
@@ -184,6 +192,129 @@ static async Task RunSessionAsync(TcpClient client)
                         watcher.Start();
                         await SendAsync(new { type = "scan.state", state = "started" });
                         break;
+
+                    case "scan.deep":
+                    {
+                        await SendAsync(new { type = "deep.scan.state", state = "started" });
+
+                        var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        var properties = new[]
+                        {
+                            "System.ItemNameDisplay",
+                            "System.Devices.FriendlyName",
+                            "System.Devices.Aep.IsPaired",
+                            "System.Devices.Aep.IsConnected"
+                        };
+
+                        async Task EmitBleCatalogAsync(string selector, string source)
+                        {
+                            var infos = await DeviceInformation.FindAllAsync(selector, properties);
+                            foreach (var info in infos)
+                            {
+                                if (!seenIds.Add("ble:" + info.Id))
+                                    continue;
+
+                                try
+                                {
+                                    using var bleDevice = await BluetoothLEDevice.FromIdAsync(info.Id);
+                                    if (bleDevice is null)
+                                        continue;
+
+                                    var friendlyName = BestDeviceInformationName(info);
+                                    if (string.IsNullOrWhiteSpace(friendlyName))
+                                        friendlyName = bleDevice.Name;
+
+                                    await SendAsync(new
+                                    {
+                                        type = "device.catalog.result",
+                                        transport = "BLE",
+                                        source,
+                                        address = bleDevice.BluetoothAddress.ToString("X12"),
+                                        name = string.IsNullOrWhiteSpace(friendlyName) ? null : friendlyName,
+                                        paired = info.Pairing.IsPaired,
+                                        connected = bleDevice.ConnectionStatus == BluetoothConnectionStatus.Connected,
+                                        deviceId = info.Id
+                                    });
+                                }
+                                catch
+                                {
+                                    // Enumeration is diagnostic: one inaccessible device must not stop it.
+                                }
+                            }
+                        }
+
+                        async Task EmitClassicCatalogAsync(string selector, string source)
+                        {
+                            var infos = await DeviceInformation.FindAllAsync(selector, properties);
+                            foreach (var info in infos)
+                            {
+                                if (!seenIds.Add("classic:" + info.Id))
+                                    continue;
+
+                                try
+                                {
+                                    using var classicDevice = await BluetoothDevice.FromIdAsync(info.Id);
+                                    if (classicDevice is null)
+                                        continue;
+
+                                    var friendlyName = BestDeviceInformationName(info);
+                                    if (string.IsNullOrWhiteSpace(friendlyName))
+                                        friendlyName = classicDevice.Name;
+
+                                    await SendAsync(new
+                                    {
+                                        type = "device.catalog.result",
+                                        transport = "Classic",
+                                        source,
+                                        address = classicDevice.BluetoothAddress.ToString("X12"),
+                                        name = string.IsNullOrWhiteSpace(friendlyName) ? null : friendlyName,
+                                        paired = info.Pairing.IsPaired,
+                                        connected = classicDevice.ConnectionStatus == BluetoothConnectionStatus.Connected,
+                                        deviceId = info.Id
+                                    });
+                                }
+                                catch
+                                {
+                                }
+                            }
+                        }
+
+                        try
+                        {
+                            await EmitBleCatalogAsync(BluetoothLEDevice.GetDeviceSelector(), "windows-ble-catalog");
+                        }
+                        catch (Exception ex)
+                        {
+                            await SendAsync(new
+                            {
+                                type = "deep.scan.warning",
+                                source = "windows-ble-catalog",
+                                message = ex.Message
+                            });
+                        }
+
+                        try
+                        {
+                            await EmitClassicCatalogAsync(BluetoothDevice.GetDeviceSelector(), "windows-classic-catalog");
+                        }
+                        catch (Exception ex)
+                        {
+                            await SendAsync(new
+                            {
+                                type = "deep.scan.warning",
+                                source = "windows-classic-catalog",
+                                message = ex.Message
+                            });
+                        }
+
+                        await SendAsync(new
+                        {
+                            type = "deep.scan.state",
+                            state = "finished",
+                            catalogEntries = seenIds.Count
+                        });
+                        break;
+                    }
 
                     case "scan.stop":
                         if (watcher is null)
@@ -467,6 +598,25 @@ static async Task<string?> ResolveFriendlyNameAsync(ulong address)
     catch
     {
         // Some unpaired devices do not expose all DeviceInformation properties.
+    }
+
+    return best;
+}
+
+
+static string? BestDeviceInformationName(DeviceInformation info)
+{
+    string? best = string.IsNullOrWhiteSpace(info.Name) ? null : info.Name.Trim();
+
+    foreach (var key in new[] { "System.Devices.FriendlyName", "System.ItemNameDisplay" })
+    {
+        if (info.Properties.TryGetValue(key, out var value) &&
+            value is string text &&
+            !string.IsNullOrWhiteSpace(text) &&
+            (best is null || text.Trim().Length > best.Length))
+        {
+            best = text.Trim();
+        }
     }
 
     return best;
