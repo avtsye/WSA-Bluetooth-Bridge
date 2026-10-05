@@ -9,8 +9,8 @@ AF="false"
 AP="false"
 DAEMON="false"
 
-service check media.audio_flinger >/dev/null 2>&1 && AF="true"
-service check media.audio_policy >/dev/null 2>&1 && AP="true"
+dumpsys media.audio_flinger >/dev/null 2>&1 && AF="true"
+dumpsys media.audio_policy >/dev/null 2>&1 && AP="true"
 pidof wsa-btd >/dev/null 2>&1 && DAEMON="true"
 
 if [ "$AF" != "true" ] || [ "$AP" != "true" ]; then
