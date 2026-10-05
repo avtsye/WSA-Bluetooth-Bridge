@@ -8,8 +8,12 @@ source_b64 = root / "assets" / "app-icon-base64.txt"
 png_path = root / "windows-host" / "app-icon.png"
 ico_path = root / "windows-host" / "app.ico"
 
-raw = base64.b64decode(source_b64.read_text(encoding="utf-8").strip())
+payload = "".join(source_b64.read_text(encoding="utf-8").split())
+payload += "=" * (-len(payload) % 4)
+raw = base64.b64decode(payload, validate=True)
 img = Image.open(BytesIO(raw)).convert("RGBA")
+if img.width < 128 or img.height < 128:
+    raise RuntimeError(f"Icon source is unexpectedly small: {img.size}")
 
 png_path.parent.mkdir(parents=True, exist_ok=True)
 img.save(png_path, "PNG", optimize=True)
