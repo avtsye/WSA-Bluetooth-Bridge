@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WSA Bluetooth Bridge Icon</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+html,body{height:100%;margin:0;background:#111;display:grid;place-items:center}
+.icon{width:min(80vmin,768px);height:auto;filter:drop-shadow(0 18px 28px #0008)}
+</style>
+</head>
+<body>
+<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0877f9"/>
+      <stop offset="1" stop-color="#003a9e"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#b9ff37"/>
+      <stop offset="0.5" stop-color="#72df16"/>
+      <stop offset="1" stop-color="#2fa600"/>
+    </linearGradient>
+    <linearGradient id="win" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#55dcff"/>
+      <stop offset="1" stop-color="#0791f5"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#001d57" flood-opacity=".55"/>
+    </filter>
+  </defs>
+
+  <rect x="12" y="12" width="488" height="488" rx="108" fill="url(#bg)" stroke="#42d8ff" stroke-width="8"/>
+  <circle cx="256" cy="250" r="182" fill="#198cff" opacity=".22"/>
+
+  <g filter="url(#shadow)">
+    <line x1="188" y1="120" x2="161" y2="76" stroke="#89ef22" stroke-width="16" stroke-linecap="round"/>
+    <line x1="324" y1="120" x2="351" y2="76" stroke="#89ef22" stroke-width="16" stroke-linecap="round"/>
+
+    <path d="M146 220c0-72 49-127 110-127s110 55 110 127z" fill="url(#green)"/>
+    <rect x="146" y="207" width="220" height="192" rx="62" fill="url(#green)"/>
+
+    <circle cx="202" cy="163" r="16" fill="#111"/>
+    <circle cx="310" cy="163" r="16" fill="#111"/>
+    <circle cx="196" cy="157" r="5" fill="#fff"/>
+    <circle cx="304" cy="157" r="5" fill="#fff"/>
+
+    <rect x="113" y="246" width="58" height="125" rx="29" fill="url(#green)" transform="rotate(12 142 309)"/>
+    <rect x="341" y="246" width="58" height="125" rx="29" fill="url(#green)" transform="rotate(-12 370 309)"/>
+
+    <rect x="183" y="382" width="52" height="72" rx="24" fill="url(#green)"/>
+    <rect x="277" y="382" width="52" height="72" rx="24" fill="url(#green)"/>
+
+    <g transform="translate(174 247) rotate(-2 82 73)">
+      <rect x="0" y="0" width="76" height="68" rx="9" fill="url(#win)" stroke="#a8f2ff" stroke-width="4"/>
+      <rect x="84" y="0" width="76" height="68" rx="9" fill="url(#win)" stroke="#a8f2ff" stroke-width="4"/>
+      <rect x="0" y="76" width="76" height="68" rx="9" fill="url(#win)" stroke="#a8f2ff" stroke-width="4"/>
+      <rect x="84" y="76" width="76" height="68" rx="9" fill="url(#win)" stroke="#a8f2ff" stroke-width="4"/>
+    </g>
+
+    <circle cx="157" cy="319" r="28" fill="#7de51c"/>
+    <circle cx="355" cy="319" r="28" fill="#7de51c"/>
+  </g>
+</svg>
+</body>
+</html>
