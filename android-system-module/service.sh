@@ -29,9 +29,19 @@ while [ "$i" -lt 60 ]; do
   i=$((i + 1))
 done
 
+PROBE="$MODDIR/audio-env.sh"
+chmod 0755 "$PROBE" 2>/dev/null || true
+
+# Capture the exact WSA Audio HAL/AudioPolicy environment after Android boot.
+"$PROBE" || echo "audio environment probe failed"
+
 while true; do
   echo "Starting wsa-btd ($ABI)"
-  "$BIN"
+  "$BIN" &
+  pid=$!
+  sleep 2
+  "$PROBE" || true
+  wait "$pid"
   code=$?
   echo "wsa-btd exited with $code; restarting in 3 seconds"
   sleep 3
