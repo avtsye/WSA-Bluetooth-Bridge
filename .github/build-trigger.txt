@@ -1,0 +1,1 @@
+Manual rebuild requested after successful icon packaging.
