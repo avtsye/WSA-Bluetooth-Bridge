@@ -8,7 +8,9 @@ import android.text.InputType;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ArrayAdapter;
 import android.widget.ScrollView;
+import android.widget.Spinner;
 import android.widget.TextView;
 
 import org.json.JSONObject;
@@ -20,11 +22,19 @@ import java.io.OutputStreamWriter;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public final class MainActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private TextView log;
     private EditText address;
+    private Spinner devicesSpinner;
+    private final Map<String, String> deviceLabels = new LinkedHashMap<>();
+    private final ArrayList<String> deviceAddresses = new ArrayList<>();
+    private final ArrayList<String> deviceDisplay = new ArrayList<>();
+    private ArrayAdapter<String> deviceAdapter;
     private EditText serviceUuid;
     private EditText characteristicUuid;
     private Socket socket;
@@ -46,6 +56,11 @@ public final class MainActivity extends Activity {
 
         Button stop = new Button(this);
         stop.setText("Stop BLE scan");
+
+        devicesSpinner = new Spinner(this);
+        deviceAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, deviceDisplay);
+        devicesSpinner.setAdapter(deviceAdapter);
 
         address = new EditText(this);
         address.setHint("BLE address, e.g. A1B2C3D4E5F6");
@@ -81,6 +96,7 @@ public final class MainActivity extends Activity {
         root.addView(connectHost);
         root.addView(scan);
         root.addView(stop);
+        root.addView(devicesSpinner);
         root.addView(address);
         root.addView(connectDevice);
         root.addView(disconnectDevice);
@@ -96,6 +112,20 @@ public final class MainActivity extends Activity {
         connectHost.setOnClickListener(v -> connect());
         scan.setOnClickListener(v -> send("{\"type\":\"scan.start\"}"));
         stop.setOnClickListener(v -> send("{\"type\":\"scan.stop\"}"));
+
+        devicesSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, android.view.View view,
+                                       int position, long id) {
+                if (position >= 0 && position < deviceAddresses.size()) {
+                    address.setText(deviceAddresses.get(position));
+                }
+            }
+
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {
+            }
+        });
 
         connectDevice.setOnClickListener(v -> {
             try {
@@ -146,6 +176,9 @@ public final class MainActivity extends Activity {
                 while ((line = reader.readLine()) != null) {
                     try {
                         JSONObject object = new JSONObject(line);
+                        if ("scan.result".equals(object.optString("type"))) {
+                            updateDeviceList(object);
+                        }
                         append(object.toString(2));
                     } catch (Exception ignored) {
                         append(line);
@@ -157,6 +190,29 @@ public final class MainActivity extends Activity {
                 append("Connection failed: " + e);
             }
         }, "wsa-bt-reader").start();
+    }
+
+    private void updateDeviceList(JSONObject object) {
+        final String foundAddress = object.optString("address", "").trim();
+        if (foundAddress.isEmpty()) return;
+
+        final String name = object.optString("name", "").trim();
+        final int rssi = object.optInt("rssi", 0);
+        final String label = (name.isEmpty() ? "Unknown device" : name)
+                + "  [" + foundAddress + "]  RSSI " + rssi;
+
+        main.post(() -> {
+            deviceLabels.put(foundAddress, label);
+            deviceAddresses.clear();
+            deviceDisplay.clear();
+
+            for (Map.Entry<String, String> entry : deviceLabels.entrySet()) {
+                deviceAddresses.add(entry.getKey());
+                deviceDisplay.add(entry.getValue());
+            }
+
+            deviceAdapter.notifyDataSetChanged();
+        });
     }
 
     private void send(String json) {
