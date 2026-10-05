@@ -1,6 +1,6 @@
 ; WSA Bluetooth Bridge installer
 #define MyAppName "WSA Bluetooth Bridge"
-#define MyAppVersion "0.5.0"
+#define MyAppVersion "0.8.1"
 #define MyAppPublisher "avtsye"
 #define MyAppExeName "WsaBluetoothHost.exe"
 
@@ -43,7 +43,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--background"; Flags: nowait runhidden
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NoProfile -File ""{app}\Install-WsaSystem.ps1"""; StatusMsg: "מתקין את רכיב Android/WSA..."; Flags: waituntilterminated
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NoProfile -File ""{app}\Install-WsaSystem.ps1"""; StatusMsg: "מתקין Root/Magisk ורכיב Android/WSA..."; Flags: waituntilterminated
 
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/C taskkill /IM WsaBluetoothHost.exe /F"; Flags: runhidden; RunOnceId: "StopBridge"
