@@ -170,5 +170,69 @@ if (Test-Path $systemStatus) {
     Write-Host ('סטטוס רכיב המערכת נשמר ב: ' + $systemStatus)
 }
 
-Write-Host 'התקנת Windows + Android + מודול המערכת הושלמה, והרכיב רץ עמוק בתוך WSA.'
+$policyState = Join-Path $logRoot 'wsa-bt-policy-state.json'
+& $adb -s $serial pull /data/local/tmp/wsa-bt-policy-state.json $policyState 2>$null | Out-Null
+
+$activatePolicy = $false
+if (Test-Path $policyState) {
+    try {
+        $policy = Get-Content $policyState -Raw | ConvertFrom-Json
+        if ($policy.compatible -eq $true -and $policy.enabled -ne $true) {
+            $activatePolicy = $true
+        }
+    }
+    catch {
+        Write-Host 'לא ניתן לקרוא את מצב Audio Policy; נשאר במצב אבחון בטוח.'
+    }
+}
+
+if ($activatePolicy) {
+    Write-Host 'Audio HAL תואם נמצא. מפעיל את נתיב WSA Bridge ומאתחל את Android פעם נוספת...'
+
+    & $adb -s $serial shell su -c '/data/adb/modules/wsa_bt_bridge/enable-policy.sh' 2>$null | Out-Null
+    & $adb -s $serial shell su -c '/data/adb/modules/wsa_bt_bridge/policy-shim.sh' 2>$null | Out-Null
+
+    & $adb -s $serial shell su -c reboot 2>$null | Out-Null
+    Start-Sleep -Seconds 8
+
+    & $adb start-server | Out-Null
+    & $adb connect 127.0.0.1:58526 2>$null | Out-Null
+    $serial = Get-WsaDevice -TimeoutSeconds 180
+
+    if (-not $serial) {
+        Write-Host 'WSA לא חזר לאחר הפעלת Audio Policy. המודול כולל rollback ויחזור למצב בטוח באתחול הבא.'
+        exit 14
+    }
+
+    & $adb -s $serial reverse tcp:17890 tcp:17890 | Out-Null
+    & $adb -s $serial reverse tcp:17891 tcp:17891 | Out-Null
+    Start-Sleep -Seconds 10
+
+    $health = Join-Path $logRoot 'wsa-bt-health.json'
+    $policyState2 = Join-Path $logRoot 'wsa-bt-policy-state-after-activation.json'
+
+    & $adb -s $serial shell su -c '/data/adb/modules/wsa_bt_bridge/health-check.sh' 2>$null | Out-Null
+    & $adb -s $serial pull /data/local/tmp/wsa-bt-health.json $health 2>$null | Out-Null
+    & $adb -s $serial pull /data/local/tmp/wsa-bt-policy-state.json $policyState2 2>$null | Out-Null
+
+    if (Test-Path $health) {
+        try {
+            $healthInfo = Get-Content $health -Raw | ConvertFrom-Json
+            if ($healthInfo.healthy -ne $true) {
+                Write-Host 'בדיקת AudioFlinger נכשלה. rollback הוכן אוטומטית.'
+                & $adb -s $serial shell su -c reboot 2>$null | Out-Null
+                exit 15
+            }
+            Write-Host 'Audio HAL/Policy shim פעיל ובריא.'
+        }
+        catch {
+            Write-Host 'לא ניתן לאמת את קובץ הבריאות; הלוג נשמר לבדיקה.'
+        }
+    }
+}
+else {
+    Write-Host 'Audio Policy נשאר במצב אבחון: לא זוהתה עדיין תאימות בטוחה להפעלה.'
+}
+
+Write-Host 'התקנת Windows + Android + Audio HAL bridge הושלמה.'
 exit 0
