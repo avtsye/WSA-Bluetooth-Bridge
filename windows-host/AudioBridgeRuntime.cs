@@ -67,10 +67,16 @@ internal sealed class AudioBridgeRuntime : IDisposable
         {
             StopPlaybackLocked();
 
+            MMDevice endpoint;
             if (string.IsNullOrWhiteSpace(_renderEndpointId))
-                return new { type = "audio.playback.state", state = "failed", error = "render_endpoint_not_selected" };
-
-            var endpoint = _enumerator.GetDevice(_renderEndpointId);
+            {
+                endpoint = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                _renderEndpointId = endpoint.ID;
+            }
+            else
+            {
+                endpoint = _enumerator.GetDevice(_renderEndpointId);
+            }
             var format = new WaveFormat(sampleRate, 16, channels);
             _playbackBuffer = new BufferedWaveProvider(format)
             {
@@ -110,10 +116,16 @@ internal sealed class AudioBridgeRuntime : IDisposable
         {
             StopCaptureLocked();
 
+            MMDevice endpoint;
             if (string.IsNullOrWhiteSpace(_captureEndpointId))
-                return new { type = "audio.capture.state", state = "failed", error = "capture_endpoint_not_selected" };
-
-            var endpoint = _enumerator.GetDevice(_captureEndpointId);
+            {
+                endpoint = _enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications);
+                _captureEndpointId = endpoint.ID;
+            }
+            else
+            {
+                endpoint = _enumerator.GetDevice(_captureEndpointId);
+            }
             _capture = new WasapiCapture(endpoint);
             _captureSequence = 0;
 
