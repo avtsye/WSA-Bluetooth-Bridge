@@ -34,6 +34,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
+      - name: Restore stable APK signing key
+        run: base64 -d .github/ci/wsabt-debug.keystore.b64 > android-bridge/ci-debug.keystore
       - name: Build Android test client
         working-directory: android-bridge
         run: gradle assembleDebug
