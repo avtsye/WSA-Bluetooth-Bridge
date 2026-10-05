@@ -91,6 +91,7 @@ jobs:
     needs:
       - windows-host
       - android-daemon
+      - android-test-client
     steps:
       - uses: actions/checkout@v4
 
@@ -111,6 +112,12 @@ jobs:
         with:
           name: wsa-btd-arm64-v8a
           path: artifacts/daemon-arm64-v8a
+
+      - name: Download Android client
+        uses: actions/download-artifact@v4
+        with:
+          name: WsaBluetoothBridgeClient-debug
+          path: artifacts/android-client
 
       - name: Build WSA system module
         shell: pwsh
