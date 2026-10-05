@@ -19,8 +19,11 @@ internal sealed class TrayApp : IDisposable
     private System.Windows.Forms.Timer? _timer;
     private bool _disposed;
 
-    private TrayApp()
+    private readonly bool _showInitially;
+
+    private TrayApp(bool showInitially)
     {
+        _showInitially = showInitially;
         _uiThread = new Thread(UiMain)
         {
             IsBackground = true,
@@ -31,7 +34,7 @@ internal sealed class TrayApp : IDisposable
         _ready.Wait(TimeSpan.FromSeconds(5));
     }
 
-    public static TrayApp Start() => new();
+    public static TrayApp Start(bool showInitially = false) => new(showInitially);
 
     private void UiMain()
     {
@@ -57,6 +60,11 @@ internal sealed class TrayApp : IDisposable
         _notifyIcon.DoubleClick += (_, _) => ShowWindow();
 
         _form = BuildStatusForm();
+        if (_showInitially)
+            _form.Shown += (_, _) => _ = RefreshStatusAsync();
+        else
+            _form.Load += (_, _) => _form.Hide();
+
         _timer = new System.Windows.Forms.Timer { Interval = 4000 };
         _timer.Tick += async (_, _) => await RefreshStatusAsync();
         _timer.Start();
@@ -335,7 +343,12 @@ internal sealed class TrayApp : IDisposable
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "WSABluetoothBridge");
         Directory.CreateDirectory(folder);
-        Process.Start(new ProcessStartInfo("explorer.exe", $\""{folder}"\") { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "explorer.exe",
+            Arguments = $"\"{folder}\"",
+            UseShellExecute = true
+        });
     }
 
     private static void RestartBridge()
