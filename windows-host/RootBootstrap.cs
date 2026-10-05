@@ -57,10 +57,14 @@ internal static class RootBootstrap
 
             await LogAsync(logFile, "Root missing. Launching elevated Upgrade-Wsa.ps1 -ForceRoot.");
 
+            var wrapper = Path.Combine(AppContext.BaseDirectory, "Run-RootUpgrade.cmd");
             using var process = Process.Start(new ProcessStartInfo
             {
-                FileName = "powershell.exe",
-                Arguments = $"-ExecutionPolicy Bypass -NoProfile -File \"{upgrade}\" -ForceRoot",
+                FileName = File.Exists(wrapper) ? wrapper : "powershell.exe",
+                Arguments = File.Exists(wrapper)
+                    ? ""
+                    : $"-ExecutionPolicy Bypass -NoProfile -File \"{upgrade}\" -ForceRoot",
+                WorkingDirectory = AppContext.BaseDirectory,
                 UseShellExecute = true,
                 Verb = "runas"
             });
