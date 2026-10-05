@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
@@ -41,6 +42,7 @@ static async Task RunSessionAsync(TcpClient client)
     var writeGate = new SemaphoreSlim(1, 1);
     BluetoothLEAdvertisementWatcher? watcher = null;
     BluetoothLEDevice? device = null;
+    var resolvingNames = new ConcurrentDictionary<ulong, byte>();
 
     async Task SendAsync(object payload)
     {
@@ -127,9 +129,42 @@ static async Task RunSessionAsync(TcpClient client)
                                 address = args.BluetoothAddress.ToString("X12"),
                                 rssi = args.RawSignalStrengthInDBm,
                                 name = string.IsNullOrWhiteSpace(localName) ? null : localName,
+                                nameSource = string.IsNullOrWhiteSpace(localName) ? null : "advertisement",
                                 serviceUuids,
                                 timestamp = args.Timestamp.ToUniversalTime().ToString("O")
                             });
+
+                            // Many BLE peripherals omit Local Name from their advertisements.
+                            // Resolve a friendly Windows device name once per address and send an
+                            // updated scan result when one is available.
+                            if (string.IsNullOrWhiteSpace(localName) &&
+                                resolvingNames.TryAdd(args.BluetoothAddress, 0))
+                            {
+                                try
+                                {
+                                    using var discoveredDevice =
+                                        await BluetoothLEDevice.FromBluetoothAddressAsync(args.BluetoothAddress);
+
+                                    if (discoveredDevice is not null &&
+                                        !string.IsNullOrWhiteSpace(discoveredDevice.Name))
+                                    {
+                                        await SendAsync(new
+                                        {
+                                            type = "scan.result",
+                                            address = args.BluetoothAddress.ToString("X12"),
+                                            rssi = args.RawSignalStrengthInDBm,
+                                            name = discoveredDevice.Name,
+                                            nameSource = "windows-device",
+                                            serviceUuids,
+                                            timestamp = args.Timestamp.ToUniversalTime().ToString("O")
+                                        });
+                                    }
+                                }
+                                catch
+                                {
+                                    // Name resolution is best-effort; scanning must continue.
+                                }
+                            }
                         };
 
                         watcher.Stopped += async (_, args) =>
