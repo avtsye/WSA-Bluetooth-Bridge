@@ -16,20 +16,23 @@ jobs:
           dotnet-version: "8.0.x"
       - name: Build Windows host
         run: dotnet build windows-host/WsaBluetoothHost.csproj --configuration Release
-      - name: Publish Windows host
-        run: dotnet publish windows-host/WsaBluetoothHost.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o artifacts/windows-host
+      - name: Publish Windows host (Lite)
+        run: dotnet publish windows-host/WsaBluetoothHost.csproj --configuration Release --runtime win-x64 --self-contained false -p:PublishSingleFile=true -o artifacts/windows-host-lite
 
       - name: Download Android platform-tools
         shell: pwsh
         run: |
           Invoke-WebRequest -Uri "https://dl.google.com/android/repository/platform-tools-latest-windows.zip" -OutFile "$env:RUNNER_TEMP\platform-tools.zip"
           Expand-Archive "$env:RUNNER_TEMP\platform-tools.zip" "$env:RUNNER_TEMP\platform-tools"
-          Copy-Item "$env:RUNNER_TEMP\platform-tools\platform-tools" "artifacts\windows-host\platform-tools" -Recurse
+          New-Item -ItemType Directory -Force "artifacts\windows-host-lite\platform-tools" | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\platform-tools\platform-tools\adb.exe" "artifacts\windows-host-lite\platform-tools\adb.exe"
+          Copy-Item "$env:RUNNER_TEMP\platform-tools\platform-tools\AdbWinApi.dll" "artifacts\windows-host-lite\platform-tools\AdbWinApi.dll"
+          Copy-Item "$env:RUNNER_TEMP\platform-tools\platform-tools\AdbWinUsbApi.dll" "artifacts\windows-host-lite\platform-tools\AdbWinUsbApi.dll"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: WsaBluetoothBridge-Windows
-          path: artifacts/windows-host
+          name: WsaBluetoothBridge-Windows-Lite
+          path: artifacts/windows-host-lite
 
   android-test-client:
     runs-on: ubuntu-latest
