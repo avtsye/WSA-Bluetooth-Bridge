@@ -27,6 +27,7 @@ Source: "..\artifacts\windows-host-lite\*"; DestDir: "{app}"; Flags: ignoreversi
 Source: "..\artifacts\wsa-system-module.zip"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\artifacts\android-client\app-debug.apk"; DestDir: "{app}"; DestName: "WsaBluetoothBridgeClient.apk"; Flags: ignoreversion
 Source: "Install-WsaSystem.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "Upgrade-Wsa.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\WSA Bluetooth Bridge"; Filename: "{app}\{#MyAppExeName}"
