@@ -17,10 +17,18 @@ jobs:
       - name: Build Windows host
         run: dotnet build windows-host/WsaBluetoothHost.csproj --configuration Release
       - name: Publish Windows host
-        run: dotnet publish windows-host/WsaBluetoothHost.csproj --configuration Release --runtime win-x64 --self-contained false -o artifacts/windows-host
+        run: dotnet publish windows-host/WsaBluetoothHost.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o artifacts/windows-host
+
+      - name: Download Android platform-tools
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://dl.google.com/android/repository/platform-tools-latest-windows.zip" -OutFile "$env:RUNNER_TEMP\platform-tools.zip"
+          Expand-Archive "$env:RUNNER_TEMP\platform-tools.zip" "$env:RUNNER_TEMP\platform-tools"
+          Copy-Item "$env:RUNNER_TEMP\platform-tools\platform-tools" "artifacts\windows-host\platform-tools" -Recurse
+
       - uses: actions/upload-artifact@v4
         with:
-          name: WsaBluetoothHost-win-x64
+          name: WsaBluetoothBridge-Windows
           path: artifacts/windows-host
 
   android-test-client:
