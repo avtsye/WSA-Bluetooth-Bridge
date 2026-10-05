@@ -1,6 +1,6 @@
 id=wsa_bt_bridge
 name=WSA Bluetooth Bridge System Integration
-version=0.6.0
-versionCode=60
+version=0.7.0
+versionCode=70
 author=avtsye
-description=Boot-time WSA Bluetooth/audio bridge with deep Android audio environment discovery
+description=Boot-time WSA Bluetooth/audio bridge with adaptive audio policy shim and rollback
