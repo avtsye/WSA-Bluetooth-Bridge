@@ -1,0 +1,43 @@
+name: Build PoC
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows-host:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build Windows host
+        run: dotnet build windows-host/WsaBluetoothHost.csproj --configuration Release
+      - name: Publish Windows host
+        run: dotnet publish windows-host/WsaBluetoothHost.csproj --configuration Release --runtime win-x64 --self-contained false -o artifacts/windows-host
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WsaBluetoothHost-win-x64
+          path: artifacts/windows-host
+
+  android-test-client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Build Android test client
+        working-directory: android-bridge
+        run: gradle assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WsaBluetoothBridgeClient-debug
+          path: android-bridge/app/build/outputs/apk/debug/app-debug.apk
