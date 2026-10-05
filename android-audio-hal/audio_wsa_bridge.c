@@ -149,7 +149,10 @@ static ssize_t bridge_read_capture(void* out, size_t bytes) {
         }
         uint32_t len = get_u32le(h+8);
         if (len > sizeof(g_bridge.rx)) {
-            bridge_reset_locked(); pthread_mutex_unlock(&g_bridge.lock); return -1;
+            pthread_mutex_lock(&g_bridge.lock);
+            if (g_bridge.fd == fd) bridge_reset_locked();
+            pthread_mutex_unlock(&g_bridge.lock);
+            return -1;
         }
         if (read_all(fd, g_bridge.rx, len) != 0) {
             pthread_mutex_lock(&g_bridge.lock); if (g_bridge.fd == fd) bridge_reset_locked(); pthread_mutex_unlock(&g_bridge.lock); return -1;
