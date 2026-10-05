@@ -1,6 +1,6 @@
 ; WSA Bluetooth Bridge installer
 #define MyAppName "WSA Bluetooth Bridge"
-#define MyAppVersion "0.8.4"
+#define MyAppVersion "0.8.5"
 #define MyAppPublisher "avtsye"
 #define MyAppExeName "WsaBluetoothHost.exe"
 
@@ -29,6 +29,8 @@ Source: "..\artifacts\wsa-system-module.zip"; DestDir: "{app}"; Flags: ignorever
 Source: "..\artifacts\android-client\app-debug.apk"; DestDir: "{app}"; DestName: "WsaBluetoothBridgeClient.apk"; Flags: ignoreversion
 Source: "Install-WsaSystem.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "Upgrade-Wsa.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "Run-RootUpgrade.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "Run-AndroidIntegration.cmd"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\WSA Bluetooth Bridge"; Filename: "{app}\{#MyAppExeName}"
@@ -42,8 +44,8 @@ Name: "autostart"; Description: "הפעל את WSA Bluetooth Bridge אוטומט
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "WSABluetoothBridge"; ValueData: """{app}\{#MyAppExeName}"" --background"; Tasks: autostart; Flags: uninsdeletevalue
 
 [Run]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NoProfile -File ""{app}\Upgrade-Wsa.ps1"" -ForceRoot"; StatusMsg: "מכין WSA עם Root/Magisk..."; Flags: waituntilterminated
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NoProfile -File ""{app}\Install-WsaSystem.ps1"""; StatusMsg: "מתקין את רכיב Android/Audio HAL..."; Flags: waituntilterminated
+Filename: "{cmd}"; Parameters: "/C ""{app}\Run-RootUpgrade.cmd"""; StatusMsg: "מכין WSA עם Root/Magisk..."; Flags: waituntilterminated
+Filename: "{cmd}"; Parameters: "/C ""{app}\Run-AndroidIntegration.cmd"""; StatusMsg: "מתקין את רכיב Android/Audio HAL..."; Flags: waituntilterminated
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--background"; Flags: nowait runhidden
 
 [UninstallRun]
