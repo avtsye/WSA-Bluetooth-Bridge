@@ -4,7 +4,9 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.InputType;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -22,6 +24,9 @@ import java.nio.charset.StandardCharsets;
 public final class MainActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private TextView log;
+    private EditText address;
+    private EditText serviceUuid;
+    private EditText characteristicUuid;
     private Socket socket;
     private BufferedWriter writer;
 
@@ -33,12 +38,39 @@ public final class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(24, 24, 24, 24);
 
-        Button connect = new Button(this);
-        connect.setText("Connect to Windows host");
+        Button connectHost = new Button(this);
+        connectHost.setText("Connect to Windows host");
+
         Button scan = new Button(this);
         scan.setText("Start BLE scan");
+
         Button stop = new Button(this);
         stop.setText("Stop BLE scan");
+
+        address = new EditText(this);
+        address.setHint("BLE address, e.g. A1B2C3D4E5F6");
+        address.setSingleLine(true);
+        address.setInputType(InputType.TYPE_CLASS_TEXT);
+
+        Button connectDevice = new Button(this);
+        connectDevice.setText("Connect to BLE device");
+
+        Button disconnectDevice = new Button(this);
+        disconnectDevice.setText("Disconnect BLE device");
+
+        Button discover = new Button(this);
+        discover.setText("Discover GATT services");
+
+        serviceUuid = new EditText(this);
+        serviceUuid.setHint("Service UUID");
+        serviceUuid.setSingleLine(true);
+
+        characteristicUuid = new EditText(this);
+        characteristicUuid.setHint("Characteristic UUID");
+        characteristicUuid.setSingleLine(true);
+
+        Button read = new Button(this);
+        read.setText("Read GATT characteristic");
 
         log = new TextView(this);
         log.setTextIsSelectable(true);
@@ -46,17 +78,53 @@ public final class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         scroll.addView(log);
 
-        root.addView(connect);
+        root.addView(connectHost);
         root.addView(scan);
         root.addView(stop);
+        root.addView(address);
+        root.addView(connectDevice);
+        root.addView(disconnectDevice);
+        root.addView(discover);
+        root.addView(serviceUuid);
+        root.addView(characteristicUuid);
+        root.addView(read);
         root.addView(scroll, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
 
         setContentView(root);
 
-        connect.setOnClickListener(v -> connect());
+        connectHost.setOnClickListener(v -> connect());
         scan.setOnClickListener(v -> send("{\"type\":\"scan.start\"}"));
         stop.setOnClickListener(v -> send("{\"type\":\"scan.stop\"}"));
+
+        connectDevice.setOnClickListener(v -> {
+            try {
+                JSONObject command = new JSONObject();
+                command.put("type", "device.connect");
+                command.put("address", address.getText().toString().trim());
+                send(command.toString());
+            } catch (Exception e) {
+                append("Unable to build connect command: " + e);
+            }
+        });
+
+        disconnectDevice.setOnClickListener(v ->
+                send("{\"type\":\"device.disconnect\"}"));
+
+        discover.setOnClickListener(v ->
+                send("{\"type\":\"gatt.discover\"}"));
+
+        read.setOnClickListener(v -> {
+            try {
+                JSONObject command = new JSONObject();
+                command.put("type", "gatt.read");
+                command.put("service", serviceUuid.getText().toString().trim());
+                command.put("characteristic", characteristicUuid.getText().toString().trim());
+                send(command.toString());
+            } catch (Exception e) {
+                append("Unable to build read command: " + e);
+            }
+        });
     }
 
     private void connect() {
