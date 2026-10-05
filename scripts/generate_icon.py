@@ -1,26 +1,26 @@
 from pathlib import Path
-import cairosvg
+import base64
+from io import BytesIO
 from PIL import Image
 
 root = Path(__file__).resolve().parents[1]
-svg_path = root / "assets" / "app-icon.svg"
+source_b64 = root / "assets" / "app-icon-base64.txt"
 png_path = root / "windows-host" / "app-icon.png"
 ico_path = root / "windows-host" / "app.ico"
 
+raw = base64.b64decode(source_b64.read_text(encoding="utf-8").strip())
+img = Image.open(BytesIO(raw)).convert("RGBA")
+
 png_path.parent.mkdir(parents=True, exist_ok=True)
+img.save(png_path, "PNG", optimize=True)
 
-cairosvg.svg2png(
-    url=str(svg_path),
-    write_to=str(png_path),
-    output_width=1024,
-    output_height=1024,
-)
-
-img = Image.open(png_path).convert("RGBA")
-img.save(
+# Keep the exact generated artwork and derive all Windows icon sizes from it.
+icon_source = img.resize((256, 256), Image.Resampling.LANCZOS)
+icon_source.save(
     ico_path,
     format="ICO",
     sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)],
 )
 
+print(f"Generated {png_path}")
 print(f"Generated {ico_path}")
