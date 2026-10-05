@@ -14,8 +14,13 @@ using Windows.Devices.Bluetooth.GenericAttributeProfile;
 using Windows.Devices.Enumeration;
 using Windows.Storage.Streams;
 
-if (args.Any(x => string.Equals(x, "--background", StringComparison.OrdinalIgnoreCase)))
+var backgroundMode = args.Any(x =>
+    string.Equals(x, "--background", StringComparison.OrdinalIgnoreCase));
+
+if (backgroundMode)
     BackgroundMode.HideConsole();
+
+using var tray = TrayApp.Start(showInitially: !backgroundMode);
 
 const int port = 17890;
 const int audioPort = 17891;
