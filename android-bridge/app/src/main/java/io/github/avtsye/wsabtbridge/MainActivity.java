@@ -5,6 +5,8 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
+import android.view.Gravity;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -32,6 +34,7 @@ public final class MainActivity extends Activity {
     private EditText address;
     private Spinner devicesSpinner;
     private final Map<String, String> deviceLabels = new LinkedHashMap<>();
+    private final Map<String, String> deviceNames = new LinkedHashMap<>();
     private final ArrayList<String> deviceAddresses = new ArrayList<>();
     private final ArrayList<String> deviceDisplay = new ArrayList<>();
     private ArrayAdapter<String> deviceAdapter;
@@ -47,15 +50,23 @@ public final class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(24, 24, 24, 24);
+        root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        root.setTextDirection(View.TEXT_DIRECTION_RTL);
+
+        TextView title = new TextView(this);
+        title.setText("גשר Bluetooth ל־WSA");
+        title.setTextSize(22);
+        title.setGravity(Gravity.CENTER_HORIZONTAL);
+        title.setPadding(0, 0, 0, 16);
 
         Button connectHost = new Button(this);
-        connectHost.setText("Connect to Windows host");
+        connectHost.setText("התחבר לשירות Bluetooth של Windows");
 
         Button scan = new Button(this);
-        scan.setText("Start BLE scan");
+        scan.setText("התחל סריקת BLE");
 
         Button stop = new Button(this);
-        stop.setText("Stop BLE scan");
+        stop.setText("עצור סריקה");
 
         devicesSpinner = new Spinner(this);
         deviceAdapter = new ArrayAdapter<>(this,
@@ -63,29 +74,29 @@ public final class MainActivity extends Activity {
         devicesSpinner.setAdapter(deviceAdapter);
 
         address = new EditText(this);
-        address.setHint("BLE address, e.g. A1B2C3D4E5F6");
+        address.setHint("כתובת BLE, לדוגמה A1B2C3D4E5F6");
         address.setSingleLine(true);
         address.setInputType(InputType.TYPE_CLASS_TEXT);
 
         Button connectDevice = new Button(this);
-        connectDevice.setText("Connect to BLE device");
+        connectDevice.setText("התחבר להתקן שנבחר");
 
         Button disconnectDevice = new Button(this);
-        disconnectDevice.setText("Disconnect BLE device");
+        disconnectDevice.setText("נתק את ההתקן");
 
         Button discover = new Button(this);
-        discover.setText("Discover GATT services");
+        discover.setText("טען שירותי GATT");
 
         serviceUuid = new EditText(this);
-        serviceUuid.setHint("Service UUID");
+        serviceUuid.setHint("UUID של השירות");
         serviceUuid.setSingleLine(true);
 
         characteristicUuid = new EditText(this);
-        characteristicUuid.setHint("Characteristic UUID");
+        characteristicUuid.setHint("UUID של המאפיין");
         characteristicUuid.setSingleLine(true);
 
         Button read = new Button(this);
-        read.setText("Read GATT characteristic");
+        read.setText("קרא ערך GATT");
 
         log = new TextView(this);
         log.setTextIsSelectable(true);
@@ -93,6 +104,7 @@ public final class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         scroll.addView(log);
 
+        root.addView(title);
         root.addView(connectHost);
         root.addView(scan);
         root.addView(stop);
@@ -158,7 +170,7 @@ public final class MainActivity extends Activity {
     }
 
     private void connect() {
-        append("Connecting to 127.0.0.1:17890 ...");
+        append("מתחבר לשירות Windows ב־127.0.0.1:17890...");
         new Thread(() -> {
             try {
                 Socket s = new Socket();
@@ -170,7 +182,7 @@ public final class MainActivity extends Activity {
 
                 socket = s;
                 writer = w;
-                append("Connected.");
+                append("מחובר לשירות Windows.");
 
                 String line;
                 while ((line = reader.readLine()) != null) {
@@ -185,9 +197,9 @@ public final class MainActivity extends Activity {
                     }
                 }
 
-                append("Host disconnected.");
+                append("החיבור לשירות Windows נותק.");
             } catch (Exception e) {
-                append("Connection failed: " + e);
+                append("החיבור נכשל: " + e);
             }
         }, "wsa-bt-reader").start();
     }
@@ -196,12 +208,28 @@ public final class MainActivity extends Activity {
         final String foundAddress = object.optString("address", "").trim();
         if (foundAddress.isEmpty()) return;
 
-        final String name = object.optString("name", "").trim();
+        final String incomingName = object.optString("name", "").trim();
         final int rssi = object.optInt("rssi", 0);
-        final String label = (name.isEmpty() ? "Unknown device" : name)
-                + "  [" + foundAddress + "]  RSSI " + rssi;
 
         main.post(() -> {
+            String currentName = deviceNames.get(foundAddress);
+
+            // Never replace a real resolved name with an empty advertisement name.
+            // Prefer the longer non-empty name because advertising names are commonly shortened.
+            if (!incomingName.isEmpty() &&
+                    (currentName == null || currentName.isEmpty() ||
+                     incomingName.length() > currentName.length())) {
+                deviceNames.put(foundAddress, incomingName);
+                currentName = incomingName;
+            }
+
+            if (currentName == null || currentName.isEmpty()) {
+                currentName = "התקן ללא שם";
+            }
+
+            String label = currentName + "\n"
+                    + foundAddress + "   •   RSSI " + rssi;
+
             deviceLabels.put(foundAddress, label);
             deviceAddresses.clear();
             deviceDisplay.clear();
@@ -220,7 +248,7 @@ public final class MainActivity extends Activity {
             try {
                 BufferedWriter w = writer;
                 if (w == null) {
-                    append("Not connected.");
+                    append("אין חיבור לשירות Windows.");
                     return;
                 }
                 synchronized (this) {
@@ -229,7 +257,7 @@ public final class MainActivity extends Activity {
                     w.flush();
                 }
             } catch (Exception e) {
-                append("Send failed: " + e);
+                append("שליחת הפקודה נכשלה: " + e);
             }
         }, "wsa-bt-writer").start();
     }
