@@ -117,7 +117,7 @@ static async Task RunSessionAsync(TcpClient client)
                             ScanningMode = BluetoothLEScanningMode.Active
                         };
 
-                        watcher.Received += async (_, args) =>
+                        watcher.Received += async (sender, args) =>
                         {
                             var localName = args.Advertisement.LocalName;
                             var serviceUuids = args.Advertisement.ServiceUuids
@@ -140,7 +140,7 @@ static async Task RunSessionAsync(TcpClient client)
                             // updated result even when the advertisement already had a short name.
                             if (resolvingNames.TryAdd(args.BluetoothAddress, 0))
                             {
-                                _ = Task.Run(async () =>
+                                Task.Run(async () =>
                                 {
                                     try
                                     {
